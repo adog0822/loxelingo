@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 
 import { ScriptText } from "@/components/ui/script-text";
 import { cx } from "@/lib/design/cx";
+import { formatRating } from "@/lib/design/numerals";
 import type { WorldId } from "@/lib/design/worlds";
 import type { VerdictSide } from "@/lib/match/api";
 import type { VerdictRule } from "./types";
@@ -55,24 +56,55 @@ function AnswerPanel({
     <article data-raised="" className="flex flex-col gap-4 p-6" style={PANEL_STYLE}>
       {/* Headers are authorship, nothing more. The better answer gets no
           elevation, no border, no order change and no colour. */}
-      <header className="flex flex-wrap items-baseline gap-2">
-        <span className="t-title-3" style={{ color: "var(--text-primary)" }}>
-          {side.label}
-        </span>
-
-        {side.isBot ? (
-          <span
-            className="t-label"
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: "var(--r-full)",
-              padding: "1px 8px",
-              color: "var(--text-tertiary)",
-            }}
-          >
-            BOT
+      <header className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="t-title-3" style={{ color: "var(--text-primary)" }}>
+            {side.label}
           </span>
-        ) : null}
+
+          {/* `You · 1 412`, `Haruki · 1 588`. Tertiary and at --t-num, so it sits
+              beside the name as an attribute rather than competing with it. The
+              separator is decorative and hidden; the numeral is not announced as
+              part of the name either, because a rating is not a name. */}
+          {side.rating === null ? null : (
+            <>
+              <span aria-hidden="true" style={{ color: "var(--text-tertiary)" }}>
+                ·
+              </span>
+              <span
+                data-numeric=""
+                className="t-num"
+                style={{ color: "var(--text-tertiary)" }}
+              >
+                {formatRating(side.rating)}
+              </span>
+            </>
+          )}
+
+          {side.isBot ? (
+            <span
+              className="t-label"
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: "var(--r-full)",
+                padding: "1px 8px",
+                color: "var(--text-tertiary)",
+              }}
+            >
+              BOT
+            </span>
+          ) : null}
+        </div>
+
+        {/* The bot's one authored line, in its own voice. It shows the archetype
+            and never names it, so it does the work a "1 580 / warm guide" label
+            would do dishonestly: the reader meets a character and infers the
+            rung from the answer sitting directly underneath it. */}
+        {side.selfDescription === null ? null : (
+          <p className="t-body-sm" style={{ color: "var(--text-secondary)" }}>
+            {side.selfDescription}
+          </p>
+        )}
       </header>
 
       {side.content.length === 0 ? (
@@ -146,9 +178,11 @@ export interface VerdictComparisonProps {
  * loss screen that is structurally different from a win screen is a punishment
  * screen.
  *
- * No rating is printed in either header. §6.3 sketches `You · 1 412`, but the
- * contract carries no per-side rating and the design system bans inventing one.
- * An absence is correct where a measurement is missing.
+ * Each header prints its side's rating when there is one — §6.3's `You · 1 412`
+ * and `Haruki · 1 588` — and prints nothing when there is not. Nothing here is
+ * invented: yours is the rating you brought into the match and a bot's is its
+ * authored rung, so an unrated ladder, an unsettled match or a human ghost all
+ * render as an absence, which is correct where a measurement is missing.
  *
  * These are the only two cards in the product. They are siblings and are never
  * nested.

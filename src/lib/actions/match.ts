@@ -6,7 +6,11 @@ import { getSessionState } from '@/lib/auth/session'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { WORLD_IDS, langForWorld, type WorldId } from '@/lib/design/worlds'
 import { selectTask, createTaskQueries } from '@/lib/match/tasks'
-import { findGhostMatch, createMatchmakingQueries } from '@/lib/match/matchmaking'
+import {
+  findGhostMatch,
+  createMatchmakingQueries,
+  type BotDefinition,
+} from '@/lib/match/matchmaking'
 import { submitAnswer, createSubmitQueries } from '@/lib/match/submit'
 import type { LadderId } from '@/lib/judge/rubric'
 import type {
@@ -351,19 +355,36 @@ export async function getVerdict(matchId: string): Promise<VerdictPayload | null
   const world = worldFromSlug(match.world_slug)
   if (!world || !isLadderId(match.ladder_slug)) return null
 
-  // Resolve the bot's authored NAME. `bot_slug` is an identifier, not a label:
-  // rendering it raw shows a Japanese opponent as "satoru" instead of "Satoru".
-  // A character the user is supposed to recognise cannot be introduced by its
-  // primary key.
+  // Resolve the bot's authored CONTENT — name, rating, voice line. `bot_slug` is
+  // an identifier, not a label: rendering it raw shows a Japanese opponent as
+  // "satoru" instead of "Satoru". A character the user is supposed to recognise
+  // cannot be introduced by its primary key.
+  //
+  // Through `fetchBotRoster` rather than a second `bots` select of its own. That
+  // port already maps the row shape to `BotDefinition`, and a hand-rolled query
+  // here would be a second place that has to learn about every column the table
+  // grows. It reads the whole cast (five rows) to use one, which is the right
+  // trade for having exactly one definition of what a bot is.
+  //
+  // It also scopes the lookup to `matches.world_slug`, so a slug belonging to
+  // another world's cast does NOT resolve — the same invariant `botDisplayRating`
+  // enforces when the seat is filled.
   const botSlug = theirs?.is_bot ? theirs.bot_slug : null
-  let botName: string | null = null
+  let bot: BotDefinition | undefined
   if (botSlug) {
-    const { data: bot } = await db
-      .from('bots')
-      .select('name')
-      .eq('slug', botSlug)
-      .maybeSingle()
-    botName = bot?.name ?? null
+    try {
+      const roster = await createMatchmakingQueries(db).fetchBotRoster(match.world_slug)
+      bot = roster.bySlug(botSlug)
+    } catch (error) {
+      // A bots read failure must not blank the verdict. The judgment, both
+      // answers and the rating are all in hand; losing the opponent's name is a
+      // degraded card, losing the screen is a lost lesson.
+      console.error('[getVerdict] bot roster read failed', {
+        worldSlug: match.world_slug,
+        botSlug,
+        error,
+      })
+    }
   }
 
   const promptTask = (match.prompt_snapshot ?? {}) as PromptJson
@@ -375,16 +396,24 @@ export async function getVerdict(matchId: string): Promise<VerdictPayload | null
     isYou: true,
     content: mySubmission?.content ?? '',
     result: (mine.result ?? 'pending') as VerdictSide['result'],
+    // The rating brought INTO the match, so this header and beat 4's left-hand
+    // numeral are the same number. Null until settlement, and on unrated ladders.
+    rating: typeof mine.rating_before === 'number' ? mine.rating_before : null,
+    selfDescription: null,
   }
 
   const opponent: VerdictSide = {
     // Falls back to the slug only if a bot row is genuinely missing, which is a
     // data bug worth seeing on screen rather than hiding behind "Bot".
-    label: theirs?.is_bot ? (botName ?? botSlug ?? 'Bot') : 'Opponent',
+    label: theirs?.is_bot ? (bot?.name ?? botSlug ?? 'Bot') : 'Opponent',
     isBot: theirs?.is_bot ?? false,
     isYou: false,
     content: theirSubmission?.content ?? '',
     result: (theirs?.result ?? 'pending') as VerdictSide['result'],
+    // Authored, not measured — see `VerdictSide.rating`. A human ghost gets none:
+    // their rating is theirs, and "Opponent" is deliberately anonymous.
+    rating: bot?.displayRating ?? null,
+    selfDescription: bot?.selfDescription ?? null,
   }
 
   const before = mine.rating_before

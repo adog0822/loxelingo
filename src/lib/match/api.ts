@@ -50,6 +50,27 @@ export interface VerdictSide {
   isYou: boolean
   content: string
   result: ParticipantResult
+  /**
+   * The DISPLAY-scale rating this side brought to the match — §6.3's
+   * `You · 1 412` / `Haruki · 1 588`. Yours is `rating_before`, so the header
+   * agrees with the left-hand number in beat 4 rather than pre-empting it; a
+   * bot's is its authored `bots.display_rating`, which is a property of the rung
+   * and not an estimate of anything.
+   *
+   * Null wherever no such number exists — an unrated ladder, a match that has
+   * not settled, or a human ghost, whose rating is theirs and not this screen's
+   * to publish. An absence renders as nothing at all, never as a zero.
+   */
+  rating: number | null
+  /**
+   * A bot's one authored first-person line (`bots.self_description`). Null for
+   * every human side, because a human's voice is their answer.
+   *
+   * It SHOWS the archetype and never names it — the migration enforces that with
+   * a CHECK — so this is the sentence that introduces a character, not a
+   * difficulty label the reader is asked to take on trust.
+   */
+  selfDescription: string | null
 }
 
 export interface VerdictPayload {
