@@ -80,7 +80,18 @@ export type StartMatchFailure =
   | 'unknown_world'
   | 'unknown_ladder'
   | 'world_not_launched'
+  /** The item bank is empty for this world+ladder. A content gap. */
   | 'no_items'
+  /**
+   * An item was selected, but there is no opponent to face on it: no stored
+   * human performance in any rating band, and no bot performance either.
+   *
+   * Distinct from `no_items` and the distinction matters — this one means the
+   * BOT PERFORMANCE POOL is unseeded, which is the failure you get on a fresh
+   * database. Collapsing it into `no_items` sends you hunting through the item
+   * bank for content that is already there.
+   */
+  | 'no_opponent'
   | 'rate_limited'
 
 export type StartMatchResult =

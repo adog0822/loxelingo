@@ -1,83 +1,54 @@
-import type { WorldId } from "@/lib/design/worlds";
+import type { PromptPayload } from "@/lib/match/api";
 import { GlyphPrompt } from "./glyph-prompt";
 import { MixedText } from "./mixed-text";
-import type { PromptTask } from "./types";
 
-/**
- * A still waveform. Deterministic heights, drawn once, never animated:
- * this sits on a timed screen and nothing there moves except the clock.
- */
-const WAVEFORM = [
-  6, 11, 18, 9, 14, 22, 28, 19, 12, 24, 31, 26, 17, 9, 13, 21, 27, 16, 10, 7,
-];
+export interface PromptTaskViewProps {
+  world: PromptPayload["world"];
+  /** `PromptPayload.task`. The instruction, always present. */
+  task: string;
+  /** `PromptPayload.glyph`. Non-null only on FORGE in a CJK world. */
+  glyph: string | null;
+}
 
 /**
  * PromptTaskView
  * docs/design/design-system.md §6.2.3
  *
- * The task itself: a hero glyph, a brief, or a clip. One of three,
- * chosen by the ladder's content, with no chrome around it.
+ * The task itself, with no chrome around it. Two shapes, and which one you get
+ * is decided by the payload rather than by the ladder:
+ *
+ *   - a hero glyph plus its one-line instruction, when the item carries a
+ *     glyph. `--t-glyph` is CJK only, so a Latin world's FORGE item carries no
+ *     glyph and falls through to the brief, which is correct: its FORGE prompt
+ *     is morphology, not script.
+ *   - the brief on its own otherwise.
+ *
+ * There is no third shape. RECALL's waveform player (§7.2) reads from a media
+ * path the contract does not carry, and drawing unfilled bars next to a prompt
+ * that has no audio behind it would be a decoration pretending to be
+ * information. When the payload grows a clip, the player goes here.
  */
-export function PromptTaskView({ world, task }: { world: WorldId; task: PromptTask }) {
-  if (task.kind === "glyph") {
+export function PromptTaskView({ world, task, glyph }: PromptTaskViewProps) {
+  if (glyph !== null) {
     return (
       <div className="flex flex-col items-center gap-6">
         <p className="t-body" style={{ color: "var(--text-secondary)" }}>
-          <MixedText world={world} text={task.instruction} />
+          <MixedText world={world} text={task} />
         </p>
-        <GlyphPrompt
-          world={world}
-          glyph={task.glyph}
-          reading={task.reading}
-          strokeOrderPath={task.strokeOrderPath}
-        />
+        {/*
+          `reading` and `strokeOrderPath` are null because the contract does
+          not carry them. Furigana and a stroke path are content, and content
+          the pipeline has not produced is never synthesised here.
+        */}
+        <GlyphPrompt world={world} glyph={glyph} reading={null} strokeOrderPath={null} />
       </div>
     );
   }
 
-  if (task.kind === "brief") {
-    return (
-      <div className="flex flex-col items-center gap-4">
-        <p className="t-body-lg" style={{ color: "var(--text-primary)" }}>
-          <MixedText world={world} text={task.brief} />
-        </p>
-        <p className="t-body" style={{ color: "var(--text-secondary)" }}>
-          <MixedText world={world} text={task.instruction} />
-        </p>
-      </div>
-    );
-  }
-
-  // RECALL. Playback only, and never a recording.
-  //
-  // TODO(component): WaveformPlayer (§7.2) owns this surface: 2px
-  // --gold-500 hairline bars that fill as playback proceeds, an explicit
-  // start, and a replay counter that decrements. Until it exists the
-  // bars are drawn unfilled and the state says so rather than pretending
-  // to be a player.
   return (
     <div className="flex flex-col items-center gap-4">
       <p className="t-body-lg" style={{ color: "var(--text-primary)" }}>
-        <MixedText world={world} text={task.instruction} />
-      </p>
-      <div aria-hidden="true" className="flex h-8 items-end gap-1">
-        {WAVEFORM.map((height, index) => (
-          <span
-            key={index}
-            style={{
-              display: "block",
-              width: "2px",
-              height: `${height}px`,
-              background: "var(--ink-600)",
-            }}
-          />
-        ))}
-      </div>
-      <p data-numeric="" className="t-mono" style={{ color: "var(--text-tertiary)" }}>
-        {task.replaysAllowed} replays
-      </p>
-      <p className="t-body-sm" style={{ color: "var(--text-tertiary)" }}>
-        Playback is not connected yet.
+        <MixedText world={world} text={task} />
       </p>
     </div>
   );

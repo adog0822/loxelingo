@@ -159,23 +159,23 @@ export function Beat({ index, children, mount = false, className, style }: BeatP
   );
 }
 
-export interface DiffRulesProps {
-  /** The beat at which the diff marks land. */
+export interface VerdictRulesProps {
+  /** The beat at which the marks land. */
   at: number;
   children: ReactNode;
   className?: string;
 }
 
 /**
- * DiffRules
+ * VerdictRules
  *
- * The diff is beat 3, but the spans it marks live inside beat 1's
- * panels. Rather than re-render the panels, this scope publishes the two
- * rule colours as custom properties when the beat lands. TokenDiff reads
- * them with a transparent fallback and transitions `border-bottom-color`,
- * so the rules fade in under the differing spans and nothing moves.
+ * The marks are beat 3, but the elements they colour live inside beat 1's
+ * panels. Rather than re-render the panels, this scope publishes the two rule
+ * colours as custom properties when the beat lands. VerdictComparison reads
+ * them with a transparent fallback and transitions `background-color`, so the
+ * rules fade in under the answers and nothing moves.
  */
-export function DiffRules({ at, children, className }: DiffRulesProps) {
+export function VerdictRules({ at, children, className }: VerdictRulesProps) {
   const revealed = useContext(RevealContext);
   const shown = revealed >= at;
 
@@ -185,9 +185,9 @@ export function DiffRules({ at, children, className }: DiffRulesProps) {
       style={
         shown
           ? ({
-              // Gold under the better move, cool slate under yours.
-              "--diff-rule-better": "var(--gold-400)",
-              "--diff-rule-yours": "var(--verdict-loss)",
+              // Gold under the better answer, cool slate under the other.
+              "--verdict-rule-better": "var(--gold-400)",
+              "--verdict-rule-other": "var(--verdict-loss)",
             } as CSSProperties)
           : undefined
       }

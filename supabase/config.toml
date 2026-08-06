@@ -175,9 +175,14 @@ refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
 enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
-enable_anonymous_sign_ins = false
+# Play-before-signup is the funnel: a rating is earned before an account
+# exists. Guest creation is IP-limited (anonymous_users below), so a school
+# or office behind one NAT will hit the cap; Turnstile is the mitigation.
+enable_anonymous_sign_ins = true
 # Allow/disallow testing manual linking of accounts
-enable_manual_linking = false
+# Required by linkIdentity(): converting a guest to a permanent account must
+# keep the same auth.users.id, or the rating earned as a guest is orphaned.
+enable_manual_linking = true
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
 minimum_password_length = 6
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
