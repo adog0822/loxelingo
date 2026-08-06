@@ -584,6 +584,7 @@ export type Database = {
           cold_start_beta: number | null
           constraint_text: string | null
           created_at: string
+          external_id: string | null
           id: number
           is_active: boolean
           kind: string
@@ -602,6 +603,7 @@ export type Database = {
           cold_start_beta?: number | null
           constraint_text?: string | null
           created_at?: string
+          external_id?: string | null
           id?: never
           is_active?: boolean
           kind: string
@@ -620,6 +622,7 @@ export type Database = {
           cold_start_beta?: number | null
           constraint_text?: string | null
           created_at?: string
+          external_id?: string | null
           id?: never
           is_active?: boolean
           kind?: string

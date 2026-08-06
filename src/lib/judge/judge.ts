@@ -1,4 +1,5 @@
 import { generateText, Output, APICallError } from 'ai'
+import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { getRubric, rubricRef, type LadderId } from '@/lib/judge/rubric'
 
@@ -33,21 +34,47 @@ import { getRubric, rubricRef, type LadderId } from '@/lib/judge/rubric'
  * per-match cost low. This is a measured decision, not a guess: the kappa gate
  * in ./calibration.ts tells us empirically whether the cheap model agrees with
  * human labels well enough to move ratings. If it does not clear κ > 0.6,
- * raise JUDGE_MODEL to `anthropic/claude-sonnet-5` and recalibrate.
+ * raise JUDGE_MODEL to `claude-sonnet-5` and recalibrate.
  *
  * Do not switch models without rerunning calibration — a model change is
  * exactly as significant as a rubric change, and `judge_model_version` is
  * persisted on every judgment so a before/after can be reconstructed.
+ *
+ * NOTE the id has NO `anthropic/` prefix. That prefix is AI Gateway routing
+ * syntax; the direct provider takes a bare Anthropic model id.
  */
-const JUDGE_MODEL = process.env.JUDGE_MODEL ?? 'anthropic/claude-haiku-4.5'
+const JUDGE_MODEL = process.env.JUDGE_MODEL ?? 'claude-haiku-4-5'
+
+/**
+ * ── PROVIDER: direct Anthropic, deliberately not AI Gateway ─────────────────
+ *
+ * The gateway restricts frontier models to paid tiers, which would mean a Vercel
+ * Pro subscription just to run the judge in development. Calling Anthropic
+ * directly with ANTHROPIC_API_KEY sidesteps that.
+ *
+ * What this costs us, so it is not rediscovered later as a surprise:
+ *   - model fallbacks (`providerOptions.gateway.order`) are gone; an Anthropic
+ *     outage is now an outage for us, and the queue's retry is the only cushion
+ *   - gateway cost attribution and the unified spend dashboard are gone
+ *   - the free monthly gateway credits are gone
+ *
+ * What this does NOT cost us: prompt caching. Anthropic's native cache control
+ * is available through this provider, it just has to be marked explicitly
+ * instead of `caching: 'auto'`. See the cacheControl block at the call site —
+ * the rubric is by far the largest and most stable part of every request, so
+ * caching it is the single biggest cost lever in the pipeline.
+ */
+const judgeModel = anthropic(JUDGE_MODEL)
 
 /**
  * Bumped whenever anything about how we call the judge changes — the model, the
- * temperature, the token budget, the both-orderings strategy. Persisted to
- * `judgments.judge_model_version` so a rating shift can be attributed to a
- * configuration change rather than mistaken for a population drift.
+ * temperature, the token budget, the both-orderings strategy, the provider.
+ * Persisted to `judgments.judge_model_version` so a rating shift can be
+ * attributed to a configuration change rather than mistaken for population drift.
+ *
+ * v2: moved from AI Gateway routing to the direct Anthropic provider.
  */
-export const JUDGE_CONFIG_VERSION = 1
+export const JUDGE_CONFIG_VERSION = 2
 
 /**
  * The identity of the judge configuration currently in use.
@@ -179,23 +206,31 @@ async function judgeOnce(
 
   try {
     const { output, usage } = await generateText({
-      model: JUDGE_MODEL,
+      model: judgeModel,
       // v7: `instructions`, not `system`.
       instructions: rubric.text,
       prompt: renderPrompt(input, first, second, rubric.axes),
+
+      // NO PROMPT CACHING HERE, and that is not an oversight. Two independent
+      // reasons, both verified rather than assumed:
+      //
+      //  1. Anthropic accepts `cacheControl` only on message parts, never on a
+      //     bare instructions string. Moving the rubric into a system message to
+      //     carry the marker fails: ai@7 rejects system messages in `messages`
+      //     outright ("Use the instructions option instead"). The bundled
+      //     @ai-sdk/anthropic docs still show the older pattern; core wins.
+      //  2. Even if it were expressible, it would do nothing. Anthropic will not
+      //     cache fewer than 4096 tokens on Haiku 4.5 and our rubrics are
+      //     465-614 tokens, so every request is served uncached and the marker
+      //     is silently ignored.
+      //
+      // Revisit only if a rubric grows past ~4096 tokens. At current size the
+      // dominant cost is output tokens, not the repeated prefix.
       // v7: `maxOutputTokens`, not `maxTokens`.
       maxOutputTokens: 1600,
       // Low but nonzero: fully greedy decoding makes ties collapse to position.
       temperature: 0.2,
       output: Output.object({ schema: VerdictSchema }),
-      providerOptions: {
-        gateway: {
-          // Must be explicit. Without this the gateway inserts no cache_control
-          // markers and Anthropic does not cache the rubric prefix at all.
-          caching: 'auto',
-          tags: ['feature:judge', `ladder:${input.ladder}`],
-        },
-      },
     })
 
     return {

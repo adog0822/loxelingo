@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.32",
     "@ai-sdk/react": "^4.0.55",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.0",
