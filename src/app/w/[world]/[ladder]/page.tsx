@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 
 import { LADDER_IDS, LADDER_NAMES, isLadderId, type LadderId } from "@/components/match/types";
 import { AltitudeProvider } from "@/components/ui/altitude-provider";
-import { buttonClassName } from "@/components/ui/button";
+import { Button, buttonClassName } from "@/components/ui/button";
 import { SkyLayer } from "@/components/ui/sky-layer";
 import { WORLD_IDS, getWorld, type WorldId } from "@/lib/design/worlds";
-import { startMatch } from "@/lib/actions/match";
+import { beginMatch } from "@/lib/actions/match";
 import type { StartMatchFailure } from "@/lib/match/api";
 
 /**
@@ -26,6 +26,7 @@ import type { StartMatchFailure } from "@/lib/match/api";
  */
 export default async function LadderPage(props: PageProps<"/w/[world]/[ladder]">) {
   const { world: rawWorld, ladder: rawLadder } = await props.params;
+  const { error } = await props.searchParams;
 
   // A bad slug in the URL is a 404, not a match failure. `startMatch` also
   // reports `unknown_world` and `unknown_ladder`, but it cannot be called with
@@ -34,14 +35,79 @@ export default async function LadderPage(props: PageProps<"/w/[world]/[ladder]">
   if (!isWorldId(rawWorld)) notFound();
   if (!isLadderId(rawLadder)) notFound();
 
-  const result = await startMatch(rawWorld, rawLadder);
-
-  if (result.ok) {
-    // Outside any try/catch: `redirect` signals by throwing.
-    redirect(`/w/${rawWorld}/${rawLadder}/${result.matchId}`);
+  // A failed attempt comes back here as ?error=, because beginMatch redirects.
+  if (typeof error === "string" && isStartFailure(error)) {
+    return <StartFailure world={rawWorld} ladder={rawLadder} reason={error} />;
   }
 
-  return <StartFailure world={rawWorld} ladder={rawLadder} reason={result.reason} />;
+  // DO NOT call startMatch during this render.
+  //
+  // startMatch provisions a guest session, which WRITES a cookie, and cookie
+  // writes only take effect in a Server Action or Route Handler. Called from a
+  // Server Component the write throws, the server client swallows it, and the
+  // guest is created in Supabase with no persisted session: every navigation
+  // mints another orphan user and lands on a 404.
+  //
+  // It is also correct product behaviour. The clock starts at `started_at`, so
+  // a match must begin on a deliberate act, not on navigation or a prefetch.
+  return <BeginMatch world={rawWorld} ladder={rawLadder} />;
+}
+
+function isStartFailure(value: string): value is StartMatchFailure {
+  return (
+    value === "no_session" ||
+    value === "unknown_world" ||
+    value === "unknown_ladder" ||
+    value === "world_not_launched" ||
+    value === "no_items" ||
+    value === "no_opponent" ||
+    value === "rate_limited"
+  );
+}
+
+/**
+ * The one deliberate act that starts the clock.
+ *
+ * Deliberately sparse: the task is not shown here, because seeing it before the
+ * timer starts would let a player think about the answer for free and turn a
+ * timed ladder into an untimed one.
+ */
+function BeginMatch({ world, ladder }: { world: WorldId; ladder: LadderId }) {
+  const definition = getWorld(world);
+
+  return (
+    <AltitudeProvider world={world} ladderRatings={[null]} as="main">
+      <SkyLayer />
+      <div
+        className="relative mx-auto flex min-h-dvh w-full max-w-[62ch] flex-col justify-center gap-6 px-6 py-24"
+        style={{ zIndex: "var(--z-content)" } as CSSProperties}
+      >
+        <p className="t-eyebrow" style={{ color: "var(--text-tertiary)" }}>
+          {definition.latinName} · {LADDER_NAMES[ladder]}
+        </p>
+        <h1 className="t-display-3" style={{ color: "var(--text-primary)" }}>
+          Ready when you are.
+        </h1>
+        <p className="t-body" style={{ color: "var(--text-secondary)" }}>
+          The task appears and the clock starts at the same moment. Your opponent
+          has already played, so nobody is waiting on you.
+        </p>
+        <form action={beginMatch} className="flex items-center gap-4 pt-2">
+          <input type="hidden" name="world" value={world} />
+          <input type="hidden" name="ladder" value={ladder} />
+          <Button type="submit" variant="primary">
+            Start the clock
+          </Button>
+          <Link
+            href={`/w/${world}`}
+            className={buttonClassName("quiet", "md")}
+          >
+            Back to {definition.latinName}
+          </Link>
+        </form>
+      </div>
+    </AltitudeProvider>
+  );
 }
 
 /* ------------------------------------------------------------------ */

@@ -1,6 +1,13 @@
 /**
- * The six worlds.
+ * The seven worlds.
  * docs/design/design-system.md §2.5, §3.1, §3.3
+ *
+ * Six of them are foreign languages for a native English speaker. `en` is
+ * the inverse: nobody whose first language is English enters it, so every
+ * learner there is reading the interface in a second language. That does
+ * not change anything in this module — English is a Latin-script,
+ * non-CJK world like es/fr/de — but it is why its content is authored
+ * with shorter, more concrete instructions than the other six.
  *
  * A world owns a hue, an atmosphere, a celestial body and a terrain. The
  * hue paints place. It never encodes correct/incorrect, win/loss, rank
@@ -19,12 +26,16 @@ import { CJK_FONT_SOURCES, type FontSource, type ScriptTier } from "./font-sourc
 
 export type { ScriptTier };
 
-export type WorldId = "ja" | "ko" | "zh" | "es" | "fr" | "de";
+export type WorldId = "ja" | "ko" | "zh" | "es" | "fr" | "de" | "en";
 
 export type CjkWorldId = "ja" | "ko" | "zh";
 
-/** BCP-47 tags. `zh-Hans` is mandatory: bare `zh` is not specific enough. */
-export type WorldLang = "ja" | "ko" | "zh-Hans" | "es" | "fr" | "de";
+/**
+ * BCP-47 tags. `zh-Hans` is mandatory: bare `zh` is not specific enough.
+ * `en` needs no region subtag: nothing here selects a glyph form or a
+ * dialect from it, and `en-US` would be a claim the content does not make.
+ */
+export type WorldLang = "ja" | "ko" | "zh-Hans" | "es" | "fr" | "de" | "en";
 
 export interface World {
   readonly id: WorldId;
@@ -113,6 +124,22 @@ export const WORLDS: Readonly<Record<WorldId, World>> = {
     latinName: "German",
     nativeName: "Deutsch",
     concept: "The Standing Stones",
+    cjk: false,
+    fontVar: {
+      display: "var(--font-display)",
+      text: "var(--font-text)",
+      immersion: "var(--font-text)",
+    },
+  },
+  en: {
+    id: "en",
+    lang: "en",
+    latinName: "English",
+    // The endonym and the Latin name are the same string. That is not a
+    // placeholder: §6.1 sets the native form large and the Latin name
+    // small above it, and English simply has nothing else to show there.
+    nativeName: "English",
+    concept: "The Lichen Steppe",
     cjk: false,
     fontVar: {
       display: "var(--font-display)",

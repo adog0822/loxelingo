@@ -81,6 +81,8 @@
   --color-world-fr-mark: var(--world-fr-mark);
   --color-world-de: var(--world-de-atmos);
   --color-world-de-mark: var(--world-de-mark);
+  --color-world-en: var(--world-en-atmos);
+  --color-world-en-mark: var(--world-en-mark);
 
   /* Max three series. Four or more is not permitted; cross-world
      comparison uses small multiples with direct labels. */

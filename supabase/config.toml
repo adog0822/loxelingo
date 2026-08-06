@@ -68,7 +68,11 @@ schema_paths = []
 enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = ["./seed.sql"]
+# Ordered: ./seed.sql creates the content (concepts, items), ./seeds/*.sql depends on it and
+# resolves items by external_id. The CLI executes each file over a plain SQL connection, not
+# through psql, so a `\ir` include inside seed.sql is a syntax error — this list IS the include
+# mechanism.
+sql_paths = ["./seed.sql", "./seeds/*.sql"]
 
 [db.network_restrictions]
 # Enable management of network restrictions.

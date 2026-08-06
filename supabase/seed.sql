@@ -1198,3 +1198,44 @@ begin
   raise notice 'LoxeLingo ja seed: % concepts, % items, % item->concept mappings',
     n_concepts, n_items, n_mappings;
 end $$;
+
+
+-- =============================================================================
+-- 6. BOT PERFORMANCE POOL — appended section, owned by supabase/seeds/bot-performances.sql
+--
+-- Nothing above this line changes. The bot pool that makes a duel match startable on a fresh
+-- database (5 roster bots x 25 ja duel items = 125 stored performances) lives in
+--   supabase/seeds/bot-performances.sql
+-- and is loaded by `npx supabase db reset` through config.toml:
+--   [db.seed] sql_paths = ["./seed.sql", "./seeds/*.sql"]
+--
+-- It is a separate file rather than an inline section because it depends on THIS file having
+-- already run (it resolves every item by `items.external_id`), and because a psql `\ir`
+-- include here is a syntax error: the Supabase CLI executes seed files over a plain SQL
+-- connection and does not interpret psql meta-commands.
+-- =============================================================================
+
+
+-- =============================================================================
+-- 7. ENGLISH WORLD CONTENT — appended section, owned by supabase/seeds/english-content.sql
+--
+-- Nothing above this line changes. The English world (`worlds.slug = 'en'`, added by
+-- migration 20260806064130_english_world) ships with 31 concepts and 35 items:
+--   15 DUEL briefs · 15 FORGE items · 5 RECALL reading items
+-- They live in
+--   supabase/seeds/english-content.sql
+-- and are loaded by `npx supabase db reset` through the same config.toml entry section 6
+-- documents:
+--   [db.seed] sql_paths = ["./seed.sql", "./seeds/*.sql"]
+--
+-- A separate file rather than an inline section, for one reason beyond size: English is the
+-- only world here that is not a foreign language for a native English speaker. Every learner
+-- in it is a non-native speaker, so its task instructions are themselves second-language
+-- input and are authored under a rule the six other worlds do not need — one short imperative
+-- sentence, no idiom, never harder than the item it introduces. Keeping that content in its
+-- own file keeps that rule reviewable in one place instead of diffused through this one.
+--
+-- The file is self-contained: it depends only on the migrations (the `en` world row, the
+-- ladders, `items.external_id`) and on nothing this file creates, so the glob may load it in
+-- either order relative to section 6.
+-- =============================================================================

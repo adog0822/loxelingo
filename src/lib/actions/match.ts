@@ -392,9 +392,26 @@ export async function getVerdict(matchId: string): Promise<VerdictPayload | null
   }
 }
 
-/** Convenience for the route: start a match and go straight to it. */
-export async function startMatchAndRedirect(world: string, ladder: string): Promise<void> {
+/**
+ * Form action: begin a match and go to it.
+ *
+ * MUST be invoked from a form/POST, never during a Server Component render.
+ * `startMatch` calls `ensureSession()`, which provisions a guest and needs to
+ * WRITE the session cookie — and cookie writes only work in a Server Action or
+ * Route Handler. In a Server Component the write throws, our server client
+ * swallows it (correctly, for that context), and the result is a guest created
+ * in Supabase whose session is never persisted: every navigation mints another
+ * orphan user and lands on a 404. That is exactly the bug this shape prevents.
+ *
+ * It is also the better product behaviour. A match is timed from `started_at`,
+ * so it must begin on a deliberate act rather than on navigation, back-button,
+ * or a link prefetch.
+ */
+export async function beginMatch(formData: FormData): Promise<void> {
+  const world = String(formData.get('world') ?? '')
+  const ladder = String(formData.get('ladder') ?? '')
+
   const result = await startMatch(world, ladder)
-  if (!result.ok) redirect(`/w/${world}?error=${result.reason}`)
+  if (!result.ok) redirect(`/w/${world}/${ladder}?error=${result.reason}`)
   redirect(`/w/${world}/${ladder}/${result.matchId}`)
 }

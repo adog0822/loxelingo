@@ -85,6 +85,14 @@
   --world-de-mark: #0087da;
   --world-de-deep: #002e69;
 
+  /* English, "The Lichen Steppe". OKLCH h120, the widest open arc on the
+     wheel. Red (~h17) was the other candidate and was rejected: --signal-error
+     sits at h18.8 and the earned gold ramp at h33-47, so a world there would
+     spend the one colour separation the product cannot afford to blur. */
+  --world-en-atmos: #b9d06b;
+  --world-en-mark: #768c02;
+  --world-en-deep: #2a3201;
+
   /* --- chart series. Max 3. Validated all-pairs (CVD + normal-vision). --- */
   --series-1: #dd6d45;
   --series-2: #005fc6;
@@ -134,6 +142,7 @@
   --world-es-mark: #8f3f00;
   --world-fr-mark: #802e8d;
   --world-de-mark: #005ca7;
+  --world-en-mark: #516003;
 
   --series-1: #cc572a;
   --series-2: #0058c4;
@@ -233,6 +242,11 @@
   --world-atmos: var(--world-de-atmos);
   --world-mark: var(--world-de-mark);
   --world-deep: var(--world-de-deep);
+}
+[data-world="en"] {
+  --world-atmos: var(--world-en-atmos);
+  --world-mark: var(--world-en-mark);
+  --world-deep: var(--world-en-deep);
 }
 
 /* Band-gated environment changes (§5.2). Continuous scalar,
