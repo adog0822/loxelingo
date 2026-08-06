@@ -351,6 +351,21 @@ export async function getVerdict(matchId: string): Promise<VerdictPayload | null
   const world = worldFromSlug(match.world_slug)
   if (!world || !isLadderId(match.ladder_slug)) return null
 
+  // Resolve the bot's authored NAME. `bot_slug` is an identifier, not a label:
+  // rendering it raw shows a Japanese opponent as "satoru" instead of "Satoru".
+  // A character the user is supposed to recognise cannot be introduced by its
+  // primary key.
+  const botSlug = theirs?.is_bot ? theirs.bot_slug : null
+  let botName: string | null = null
+  if (botSlug) {
+    const { data: bot } = await db
+      .from('bots')
+      .select('name')
+      .eq('slug', botSlug)
+      .maybeSingle()
+    botName = bot?.name ?? null
+  }
+
   const promptTask = (match.prompt_snapshot ?? {}) as PromptJson
   const positionInconsistent = judgment?.position_disagreement === true
 
@@ -363,7 +378,9 @@ export async function getVerdict(matchId: string): Promise<VerdictPayload | null
   }
 
   const opponent: VerdictSide = {
-    label: theirs?.is_bot ? (theirs.bot_slug ?? 'Bot') : 'Opponent',
+    // Falls back to the slug only if a bot row is genuinely missing, which is a
+    // data bug worth seeing on screen rather than hiding behind "Bot".
+    label: theirs?.is_bot ? (botName ?? botSlug ?? 'Bot') : 'Opponent',
     isBot: theirs?.is_bot ?? false,
     isYou: false,
     content: theirSubmission?.content ?? '',

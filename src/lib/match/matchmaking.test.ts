@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import { DISPLAY_INIT, DISPLAY_SCALE, toDisplayScale } from '@/lib/engine/elo'
+import { DISPLAY_INIT, DISPLAY_SCALE } from '@/lib/engine/elo'
 import {
   BAND_STEPS_DISPLAY,
-  BOT_ROSTER,
   bandWidthLogits,
   botBySlug,
   botDisplayRating,
+  botRoster,
   buildGhostSubmission,
   buildMatchInsert,
   buildParticipants,
   CHALLENGER_SEAT,
   chooseOpponent,
+  emptyBotRoster,
   findGhostMatch,
   GHOST_SEAT,
   isRatedMatch,
@@ -19,12 +20,59 @@ import {
   MAX_BAND_DISPLAY,
   nearestBotPerformance,
   POOL_LIMIT,
+  type BotDefinition,
+  type BotRoster,
   type MatchInsert,
   type MatchmakingQueries,
   type PoolPerformance,
 } from './matchmaking'
 
 const T = (n: number) => new Date(Date.UTC(2026, 0, 1 + n)).toISOString()
+
+/**
+ * The rosters, hand-written.
+ *
+ * These are the ONLY bot definitions in this file, and there is no import of a shared constant,
+ * because there is no longer a shared constant to import: the cast lives in `public.bots` and
+ * is per-world. That is exactly what these fixtures prove — the policy functions take a roster
+ * as a plain value, so every test below runs with no database, and a Japanese test roster is a
+ * different five characters from an English one.
+ */
+const def = (
+  slug: string,
+  name: string,
+  displayRating: number,
+  archetype: BotDefinition['archetype'],
+): BotDefinition => ({
+  slug,
+  name,
+  displayRating,
+  archetype,
+  selfDescription: `${name} says one line about themselves.`,
+  avatarPath: null,
+})
+
+const JA_ROSTER: BotRoster = botRoster('ja', [
+  def('satoru', 'Satoru', 940, 'earnest_beginner'),
+  def('rin', 'Rin', 1120, 'casual_peer'),
+  def('haruki', 'Haruki', 1340, 'precise_literary'),
+  def('kaori', 'Kaori', 1580, 'warm_guide'),
+  def('tetsuya', 'Tetsuya', 1820, 'master'),
+])
+
+const EN_ROSTER: BotRoster = botRoster('en', [
+  def('wren-the-copyist', 'Wren, the Copyist', 940, 'earnest_beginner'),
+  def('orrin-the-ferryman', 'Orrin, the Ferryman', 1120, 'casual_peer'),
+  def('mira-the-cartographer', 'Mira, the Cartographer', 1340, 'precise_literary'),
+  def('kestrel-the-archivist', 'Kestrel, the Archivist', 1580, 'warm_guide'),
+  def('sable-the-lantern-keeper', 'Sable, the Lantern Keeper', 1820, 'master'),
+])
+
+/** Every test that does not care about the cast uses the Japanese one. */
+const withJaRoster = (over: Partial<Parameters<typeof chooseOpponent>[2]> = {}) => ({
+  roster: JA_ROSTER,
+  ...over,
+})
 
 const human = (over: Partial<PoolPerformance> & { submissionId: string }): PoolPerformance => ({
   originMatchId: `m-${over.submissionId}`,
@@ -78,18 +126,22 @@ describe('chooseOpponent — self-match exclusion', () => {
     const mine = human({ submissionId: 's-mine', authorUserId: 'me', authorTheta: 0 })
     const theirs = human({ submissionId: 's-theirs', authorUserId: 'you', authorTheta: 0.2 })
 
-    const d = chooseOpponent(me, [mine, theirs])
+    const d = chooseOpponent(me, [mine, theirs], withJaRoster())
     expect(d.kind).toBe('human')
     if (d.kind === 'human') expect(d.performance.authorUserId).toBe('you')
   })
 
   it('falls all the way through to a bot rather than serving a user their own answer', () => {
     const me = { userId: 'me', theta: 0 }
-    const d = chooseOpponent(me, [
-      human({ submissionId: 's1', authorUserId: 'me' }),
-      human({ submissionId: 's2', authorUserId: 'me', authorTheta: 0.05 }),
-      bot('orrin-the-ferryman', thetaFor(1120)),
-    ])
+    const d = chooseOpponent(
+      me,
+      [
+        human({ submissionId: 's1', authorUserId: 'me' }),
+        human({ submissionId: 's2', authorUserId: 'me', authorTheta: 0.05 }),
+        bot('rin', thetaFor(1120)),
+      ],
+      withJaRoster(),
+    )
     expect(d.kind).toBe('bot')
     if (d.kind === 'bot') expect(d.reason).toBe('pool_empty')
   })
@@ -102,7 +154,7 @@ describe('chooseOpponent — self-match exclusion', () => {
         human({ submissionId: 's1', authorUserId: 'rival', authorTheta: 0 }),
         human({ submissionId: 's2', authorUserId: 'stranger', authorTheta: 0.3 }),
       ],
-      { excludeAuthorUserIds: ['rival'] },
+      withJaRoster({ excludeAuthorUserIds: ['rival'] }),
     )
     expect(d.kind).toBe('human')
     if (d.kind === 'human') expect(d.performance.authorUserId).toBe('stranger')
@@ -113,11 +165,15 @@ describe('chooseOpponent — progressive band widening', () => {
   const me = { userId: 'me', theta: thetaFor(1500) }
 
   it('uses the tightest band that contains anyone, and takes the nearest inside it', () => {
-    const d = chooseOpponent(me, [
-      human({ submissionId: 'near', authorTheta: thetaFor(1540) }), // 40 pts
-      human({ submissionId: 'nearer', authorTheta: thetaFor(1510) }), // 10 pts
-      human({ submissionId: 'far', authorTheta: thetaFor(1900) }),
-    ])
+    const d = chooseOpponent(
+      me,
+      [
+        human({ submissionId: 'near', authorTheta: thetaFor(1540) }), // 40 pts
+        human({ submissionId: 'nearer', authorTheta: thetaFor(1510) }), // 10 pts
+        human({ submissionId: 'far', authorTheta: thetaFor(1900) }),
+      ],
+      withJaRoster(),
+    )
     expect(d.kind).toBe('human')
     if (d.kind === 'human') {
       expect(d.performance.submissionId).toBe('nearer')
@@ -129,7 +185,11 @@ describe('chooseOpponent — progressive band widening', () => {
 
   it('widens step by step when the tight bands are empty', () => {
     // Only opponent is 350 display points away: bands 100 and 200 miss, 400 catches.
-    const d = chooseOpponent(me, [human({ submissionId: 'x', authorTheta: thetaFor(1850) })])
+    const d = chooseOpponent(
+      me,
+      [human({ submissionId: 'x', authorTheta: thetaFor(1850) })],
+      withJaRoster(),
+    )
     expect(d.kind).toBe('human')
     if (d.kind === 'human') {
       expect(d.bandStep).toBe(2)
@@ -138,10 +198,14 @@ describe('chooseOpponent — progressive band widening', () => {
   })
 
   it('widening is progressive, not a single wide net: a 150-point opponent loses to a 90-point one', () => {
-    const d = chooseOpponent(me, [
-      human({ submissionId: 'mid', authorTheta: thetaFor(1650) }), // 150 pts, band 1
-      human({ submissionId: 'closest', authorTheta: thetaFor(1450) }), // 50 pts, band 0
-    ])
+    const d = chooseOpponent(
+      me,
+      [
+        human({ submissionId: 'mid', authorTheta: thetaFor(1650) }), // 150 pts, band 1
+        human({ submissionId: 'closest', authorTheta: thetaFor(1450) }), // 50 pts, band 0
+      ],
+      withJaRoster(),
+    )
     expect(d.kind).toBe('human')
     if (d.kind === 'human') {
       expect(d.performance.submissionId).toBe('closest')
@@ -150,16 +214,24 @@ describe('chooseOpponent — progressive band widening', () => {
   })
 
   it('circulates the pool: equal-distance candidates break toward the oldest performance', () => {
-    const d = chooseOpponent(me, [
-      human({ submissionId: 'fresh', authorTheta: thetaFor(1550), submittedAt: T(30) }),
-      human({ submissionId: 'stale', authorTheta: thetaFor(1450), submittedAt: T(1) }),
-    ])
+    const d = chooseOpponent(
+      me,
+      [
+        human({ submissionId: 'fresh', authorTheta: thetaFor(1550), submittedAt: T(30) }),
+        human({ submissionId: 'stale', authorTheta: thetaFor(1450), submittedAt: T(1) }),
+      ],
+      withJaRoster(),
+    )
     expect(d.kind).toBe('human')
     if (d.kind === 'human') expect(d.performance.submissionId).toBe('stale')
   })
 
   it('accepts a candidate exactly on the band edge', () => {
-    const d = chooseOpponent(me, [human({ submissionId: 'edge', authorTheta: thetaFor(1600) })])
+    const d = chooseOpponent(
+      me,
+      [human({ submissionId: 'edge', authorTheta: thetaFor(1600) })],
+      withJaRoster(),
+    )
     expect(d.kind).toBe('human')
     if (d.kind === 'human') expect(d.bandDisplayPoints).toBe(100)
   })
@@ -170,10 +242,14 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
 
   it('stops widening at the cap and seats a bot instead of a wildly mismatched human', () => {
     // 900 display points away — beyond the 800-point cap.
-    const d = chooseOpponent(me, [
-      human({ submissionId: 'miles-away', authorTheta: thetaFor(2400) }),
-      bot('kestrel-the-archivist', thetaFor(1580)),
-    ])
+    const d = chooseOpponent(
+      me,
+      [
+        human({ submissionId: 'miles-away', authorTheta: thetaFor(2400) }),
+        bot('kaori', thetaFor(1580)),
+      ],
+      withJaRoster(),
+    )
     expect(d.kind).toBe('bot')
     if (d.kind === 'bot') {
       expect(d.reason).toBe('band_cap_reached')
@@ -182,47 +258,126 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
   })
 
   it('seats a bot when the pool is empty, and says so', () => {
-    const d = chooseOpponent(me, [bot('mira-the-cartographer', thetaFor(1340))])
+    const d = chooseOpponent(me, [bot('haruki', thetaFor(1340))], withJaRoster())
     expect(d.kind).toBe('bot')
     if (d.kind === 'bot') expect(d.reason).toBe('pool_empty')
   })
 
   it('returns none — never a fabricated opponent — when there is no bot either', () => {
-    expect(chooseOpponent(me, []).kind).toBe('none')
-    expect(chooseOpponent(me, [human({ submissionId: 's', authorTheta: thetaFor(2400) })])).toEqual({
+    expect(chooseOpponent(me, [], withJaRoster()).kind).toBe('none')
+    expect(
+      chooseOpponent(me, [human({ submissionId: 's', authorTheta: thetaFor(2400) })], withJaRoster()),
+    ).toEqual({
       kind: 'none',
       reason: 'no_opponent_available',
     })
   })
 
   it('a human just inside the cap still beats a bot', () => {
-    const d = chooseOpponent(me, [
-      human({ submissionId: 'edge', authorTheta: thetaFor(2300) }), // exactly 800 pts
-      bot('kestrel-the-archivist', thetaFor(1580)),
-    ])
+    const d = chooseOpponent(
+      me,
+      [
+        human({ submissionId: 'edge', authorTheta: thetaFor(2300) }), // exactly 800 pts
+        bot('kaori', thetaFor(1580)),
+      ],
+      withJaRoster(),
+    )
     expect(d.kind).toBe('human')
     if (d.kind === 'human') expect(d.bandDisplayPoints).toBe(MAX_BAND_DISPLAY)
   })
 
   it('picks the roster bot nearest the learner on the DISPLAY scale', () => {
-    const bots = BOT_ROSTER.map((b) => bot(b.slug, thetaFor(b.displayRating)))
-    const chosen = nearestBotPerformance(thetaFor(1600), bots)
-    expect(chosen.botSlug).toBe('kestrel-the-archivist')
-    expect(botDisplayRating(chosen)).toBe(1580)
+    const bots = JA_ROSTER.bots.map((b) => bot(b.slug, thetaFor(b.displayRating)))
+    const chosen = nearestBotPerformance(JA_ROSTER, thetaFor(1600), bots)
+    expect(chosen.botSlug).toBe('kaori')
+    expect(botDisplayRating(JA_ROSTER, chosen)).toBe(1580)
   })
 
-  it('falls back to the seeded theta when a bot slug is not in the roster', () => {
-    const orphan = bot('deprecated-bot', thetaFor(1234))
-    expect(botBySlug('deprecated-bot')).toBeUndefined()
-    expect(botDisplayRating(orphan)).toBeCloseTo(toDisplayScale(thetaFor(1234)), 6)
-  })
-
-  it('every roster bot is labeled with a slug and a name', () => {
-    for (const b of BOT_ROSTER) {
-      expect(b.slug).toMatch(/^[a-z0-9-]+$/)
-      expect(b.name.length).toBeGreaterThan(0)
-      expect(botBySlug(b.slug)).toEqual(b)
+  it('every roster bot is labeled with a slug and a name, and resolves by slug', () => {
+    for (const roster of [JA_ROSTER, EN_ROSTER]) {
+      for (const b of roster.bots) {
+        expect(b.slug).toMatch(/^[a-z0-9-]+$/)
+        expect(b.name.length).toBeGreaterThan(0)
+        expect(botBySlug(roster, b.slug)).toEqual(b)
+      }
     }
+  })
+})
+
+describe('the roster is per-world content, not a constant', () => {
+  const me = { userId: 'me', theta: thetaFor(1500) }
+
+  it('the same rung is a different character in each world', () => {
+    // The whole point of the refactor: `archetype` is the rung and is shared, so a feature can
+    // ask for "the 1580" in any world; the NAME is local and must differ.
+    for (const archetype of [
+      'earnest_beginner',
+      'casual_peer',
+      'precise_literary',
+      'warm_guide',
+      'master',
+    ] as const) {
+      const ja = JA_ROSTER.byArchetype(archetype)!
+      const en = EN_ROSTER.byArchetype(archetype)!
+      expect(ja.displayRating).toBe(en.displayRating) // the rung is a difficulty: shared
+      expect(ja.slug).not.toBe(en.slug) // the cast is local
+      expect(ja.name).not.toBe(en.name)
+    }
+  })
+
+  it('seats the JAPANESE cast in a Japanese match and the ENGLISH cast in an English one', () => {
+    const jaPool = JA_ROSTER.bots.map((b) => bot(b.slug, thetaFor(b.displayRating)))
+    const enPool = EN_ROSTER.bots.map((b) => bot(b.slug, thetaFor(b.displayRating)))
+
+    const ja = chooseOpponent(me, jaPool, { roster: JA_ROSTER })
+    const en = chooseOpponent(me, enPool, { roster: EN_ROSTER })
+
+    expect(ja.kind).toBe('bot')
+    expect(en.kind).toBe('bot')
+    if (ja.kind === 'bot' && en.kind === 'bot') {
+      // Both learners are at 1500, so both meet the warm_guide rung — under different names.
+      expect(ja.bot.archetype).toBe('warm_guide')
+      expect(en.bot.archetype).toBe('warm_guide')
+      expect(ja.bot.name).toBe('Kaori')
+      expect(en.bot.name).toBe('Kestrel, the Archivist')
+    }
+  })
+
+  it('FAILS LOUDLY on a bot from the wrong world rather than seating an unnamed opponent', () => {
+    // The bug this guards: a Japanese pool still carrying the old shared English slugs. It
+    // used to degrade silently — `botDisplayRating` derived a rating from the seeded theta and
+    // the match looked entirely normal, with an English character answering in Japanese.
+    const stray = bot('wren-the-copyist', thetaFor(940))
+    expect(botBySlug(JA_ROSTER, 'wren-the-copyist')).toBeUndefined()
+    expect(() => botDisplayRating(JA_ROSTER, stray)).toThrow(MatchmakingError)
+    expect(() => botDisplayRating(JA_ROSTER, stray)).toThrow(/not in the roster for world 'ja'/)
+    expect(() => chooseOpponent(me, [stray], { roster: JA_ROSTER })).toThrow(MatchmakingError)
+    // Same performance, correct world: seated without complaint.
+    expect(botDisplayRating(EN_ROSTER, stray)).toBe(940)
+  })
+
+  it('a world with no authored cast still matches humans, and refuses to invent a bot', () => {
+    const roster = emptyBotRoster('ko')
+    const d = chooseOpponent(
+      me,
+      [human({ submissionId: 's', authorTheta: thetaFor(1520) })],
+      { roster },
+    )
+    expect(d.kind).toBe('human')
+    expect(chooseOpponent(me, [], { roster })).toEqual({
+      kind: 'none',
+      reason: 'no_opponent_available',
+    })
+    // ...but a bot performance with no cast behind it is a seeding error, not a fallback.
+    expect(() => chooseOpponent(me, [bot('satoru', thetaFor(940))], { roster })).toThrow(
+      MatchmakingError,
+    )
+  })
+
+  it('resolves a rung by archetype without knowing any name', () => {
+    expect(JA_ROSTER.byArchetype('master')?.slug).toBe('tetsuya')
+    expect(EN_ROSTER.byArchetype('master')?.slug).toBe('sable-the-lantern-keeper')
+    expect(botRoster('ja', []).byArchetype('master')).toBeUndefined()
   })
 })
 
@@ -267,7 +422,7 @@ describe('row construction', () => {
       matchId: 'm-1',
       challengerUserId: 'me',
       challengerTheta: 0.3,
-      performance: bot('sable-the-lantern-keeper', 2.3),
+      performance: bot('tetsuya', 2.3),
     })
     expect(challenger).toMatchObject({
       seat: CHALLENGER_SEAT,
@@ -281,7 +436,7 @@ describe('row construction', () => {
       seat: GHOST_SEAT,
       user_id: null,
       is_bot: true,
-      bot_slug: 'sable-the-lantern-keeper',
+      bot_slug: 'tetsuya',
       theta_before: 2.3,
     })
     // match_participants_bot_xor_user, restated: a bot seat can never carry a user id.
@@ -347,9 +502,14 @@ type Created = Parameters<MatchmakingQueries['createGhostMatch']>[0]
 
 function fakeQueries(
   pool: readonly PoolPerformance[],
-  opts: { theta?: number | null; ladderIsRated?: boolean; open?: { matchId: string; isRated: boolean } | null } = {},
-): MatchmakingQueries & { created: Created[]; poolRequests: number } {
-  const state = { created: [] as Created[], poolRequests: 0 }
+  opts: {
+    theta?: number | null
+    ladderIsRated?: boolean
+    open?: { matchId: string; isRated: boolean } | null
+    roster?: BotRoster
+  } = {},
+): MatchmakingQueries & { created: Created[]; poolRequests: number; rosterRequests: string[] } {
+  const state = { created: [] as Created[], poolRequests: 0, rosterRequests: [] as string[] }
   return {
     get created() {
       return state.created
@@ -357,8 +517,15 @@ function fakeQueries(
     get poolRequests() {
       return state.poolRequests
     },
+    get rosterRequests() {
+      return state.rosterRequests
+    },
     async fetchLadderIsRated() {
       return opts.ladderIsRated ?? true
+    },
+    async fetchBotRoster(worldSlug) {
+      state.rosterRequests.push(worldSlug)
+      return opts.roster ?? JA_ROSTER
     },
     async fetchLearnerTheta() {
       return opts.theta === undefined ? 0 : opts.theta
@@ -405,12 +572,33 @@ describe('findGhostMatch', () => {
   })
 
   it('creates an UNRATED match when the seat goes to a bot', async () => {
-    const q = fakeQueries([bot('mira-the-cartographer', thetaFor(1340))])
+    const q = fakeQueries([bot('haruki', thetaFor(1340))])
     const res = await findGhostMatch(input, { queries: q, newMatchId: () => 'm-bot' })
     expect(res).toMatchObject({ ok: true, isRated: false })
     if (res.ok && !res.reused) expect(res.opponent.kind).toBe('bot')
     expect(q.created[0]!.match.is_rated).toBe(false)
     expect(q.created[0]!.participants[1]!.is_bot).toBe(true)
+  })
+
+  it('fetches the roster for THE MATCH’S WORLD and seats that world’s cast', async () => {
+    const q = fakeQueries([bot('wren-the-copyist', thetaFor(940))], { roster: EN_ROSTER })
+    const res = await findGhostMatch({ ...input, worldSlug: 'en' }, {
+      queries: q,
+      newMatchId: () => 'm-en',
+    })
+    expect(q.rosterRequests).toEqual(['en'])
+    expect(res.ok).toBe(true)
+    if (res.ok && !res.reused && res.opponent.kind === 'bot') {
+      expect(res.opponent.bot.name).toBe('Wren, the Copyist')
+    }
+  })
+
+  it('does not ask for a roster when the open match is reused', async () => {
+    const q = fakeQueries([human({ submissionId: 's1' })], {
+      open: { matchId: 'm-open', isRated: true },
+    })
+    await findGhostMatch(input, { queries: q })
+    expect(q.rosterRequests).toEqual([])
   })
 
   it('an unrated ladder is unrated even against a human', async () => {

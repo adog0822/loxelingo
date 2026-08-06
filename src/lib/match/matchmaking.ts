@@ -134,32 +134,73 @@ export function bandWidthLogits(displayPoints: number): number {
 // ---------------------------------------------------------------------------
 
 /**
- * The launch bot roster. Named characters with personalities and ratings, because chess.com's
- * bots are beloved precisely for being characters — and because an unlabeled bot masquerading
- * as a human is fraud that is fatal for a competitive brand when it surfaces.
+ * A bot is a named character with a personality and a rating, because chess.com's bots are
+ * beloved precisely for being characters — and because an unlabeled bot masquerading as a
+ * human is fraud that is fatal for a competitive brand when it surfaces.
  *
- * `displayRating` is on the 900-2100 display scale so it is directly comparable to what the
- * player sees, and so a designer can place a bot in a band without touching logits.
+ * THE ROSTER IS CONTENT, NOT A CONSTANT. It used to be a `BOT_ROSTER` array right here, shared
+ * by every world. That was fine while only Japanese existed and became a bug the moment English
+ * shipped: the same five English-named characters were seated in Japanese duels answering in
+ * Japanese. Names, voices and (soon) avatars are per-world CONTENT and live in `public.bots`;
+ * `MatchmakingQueries.fetchBotRoster` reads them.
+ *
+ * WHAT IS SHARED IS THE RUNG. `archetype` is a stable machine-readable id for one of the five
+ * rungs, identical in every world, so code can reason about "the 1580" without knowing the
+ * cast. `displayRating` belongs to the rung too, and is on the 900-2100 display scale so it is
+ * directly comparable to what the player sees and a designer can place a bot in a band without
+ * touching logits. `name` / `selfDescription` / `avatarPath` are local to the world.
  */
+export type BotArchetype =
+  | 'earnest_beginner'
+  | 'casual_peer'
+  | 'precise_literary'
+  | 'warm_guide'
+  | 'master'
+
 export type BotDefinition = {
   slug: string
   name: string
   displayRating: number
+  /** The rung. Shared across worlds; this is the field code may branch on. */
+  archetype: BotArchetype
+  /** One first-person line. Shows the archetype, never names it — the player infers. */
+  selfDescription: string
+  /** Storage object path for the portrait, once the art exists. */
+  avatarPath: string | null
 }
 
-export const BOT_ROSTER: readonly BotDefinition[] = [
-  { slug: 'wren-the-copyist', name: 'Wren, the Copyist', displayRating: 940 },
-  { slug: 'orrin-the-ferryman', name: 'Orrin, the Ferryman', displayRating: 1120 },
-  { slug: 'mira-the-cartographer', name: 'Mira, the Cartographer', displayRating: 1340 },
-  { slug: 'kestrel-the-archivist', name: 'Kestrel, the Archivist', displayRating: 1580 },
-  { slug: 'sable-the-lantern-keeper', name: 'Sable, the Lantern Keeper', displayRating: 1820 },
-]
+/**
+ * One world's cast, as an in-memory lookup.
+ *
+ * This is a plain value with no database behind it, which is the whole point: `chooseOpponent`,
+ * `nearestBotPerformance` and `botDisplayRating` take a roster and stay pure, so the policy is
+ * still unit-testable with a hand-written five-element array and no Postgres. The only thing
+ * that moved into the port is WHERE the array comes from.
+ */
+export type BotRoster = {
+  readonly worldSlug: string
+  readonly bots: readonly BotDefinition[]
+  bySlug(slug: string): BotDefinition | undefined
+  byArchetype(archetype: BotArchetype): BotDefinition | undefined
+}
 
-const BOT_BY_SLUG: ReadonlyMap<string, BotDefinition> = new Map(
-  BOT_ROSTER.map((b) => [b.slug, b]),
-)
+export function botRoster(worldSlug: string, bots: readonly BotDefinition[]): BotRoster {
+  const bySlug = new Map(bots.map((b) => [b.slug, b]))
+  const byArchetype = new Map(bots.map((b) => [b.archetype, b]))
+  const ordered = [...bots]
+  return {
+    worldSlug,
+    bots: ordered,
+    bySlug: (slug) => bySlug.get(slug),
+    byArchetype: (archetype) => byArchetype.get(archetype),
+  }
+}
 
-export const botBySlug = (slug: string): BotDefinition | undefined => BOT_BY_SLUG.get(slug)
+/** The empty roster, for a world whose cast has not been authored yet. */
+export const emptyBotRoster = (worldSlug: string): BotRoster => botRoster(worldSlug, [])
+
+export const botBySlug = (roster: BotRoster, slug: string): BotDefinition | undefined =>
+  roster.bySlug(slug)
 
 /**
  * IS_RATED FOR BOT MATCHES: **false**.
@@ -204,12 +245,22 @@ export type OpponentDecision =
   | {
       kind: 'bot'
       performance: PoolPerformance
-      bot: BotDefinition | undefined
+      /**
+       * Never undefined. A bot performance whose slug is not in this world's roster throws
+       * (`botDisplayRating`) rather than being seated as an anonymous "Bot": see rule 5.
+       */
+      bot: BotDefinition
       reason: 'pool_empty' | 'band_cap_reached'
     }
   | { kind: 'none'; reason: 'no_opponent_available' }
 
 export type ChooseOpponentOptions = {
+  /**
+   * This world's cast. REQUIRED, and passed in rather than imported, which is what keeps this
+   * function pure now that the roster is a database table: the caller
+   * (`findGhostMatch` -> `fetchBotRoster`) does the I/O, the policy does not.
+   */
+  roster: BotRoster
   bandStepsDisplay?: readonly number[]
   /** Authors this learner has already faced on this item. Belt-and-braces over the SQL filter. */
   excludeAuthorUserIds?: readonly string[]
@@ -236,11 +287,13 @@ export type ChooseOpponentOptions = {
  *   4. **Bot fallback** also covers the empty pool. If there is no bot performance for the
  *      item either, return `kind: 'none'` so the caller can pick a different item rather than
  *      fabricating an opponent.
+ *   5. **A bot outside the roster is an error, not a degradation.** The chosen bot is resolved
+ *      against `options.roster` and a miss THROWS. See `botDisplayRating`.
  */
 export function chooseOpponent(
   learner: { userId: string; theta: number },
   candidates: readonly PoolPerformance[],
-  options: ChooseOpponentOptions = {},
+  options: ChooseOpponentOptions,
 ): OpponentDecision {
   const bands = options.bandStepsDisplay ?? BAND_STEPS_DISPLAY
   const excluded = new Set(options.excludeAuthorUserIds ?? [])
@@ -281,11 +334,13 @@ export function chooseOpponent(
   }
 
   if (bots.length > 0) {
-    const chosen = nearestBotPerformance(learner.theta, bots)
+    const chosen = nearestBotPerformance(options.roster, learner.theta, bots)
+    const bot = chosen.botSlug ? options.roster.bySlug(chosen.botSlug) : undefined
+    if (!bot) throw unknownBotError(options.roster, chosen)
     return {
       kind: 'bot',
       performance: chosen,
-      bot: chosen.botSlug ? botBySlug(chosen.botSlug) : undefined,
+      bot,
       reason: humans.length === 0 ? 'pool_empty' : 'band_cap_reached',
     }
   }
@@ -298,24 +353,41 @@ export function chooseOpponent(
  * logits, so the roster's authored display ratings mean exactly what a designer typed.
  */
 export function nearestBotPerformance(
+  roster: BotRoster,
   learnerTheta: number,
   bots: readonly PoolPerformance[],
 ): PoolPerformance {
   const learnerDisplay = toDisplayScale(learnerTheta)
   return [...bots].sort((a, b) => {
-    const da = Math.abs(botDisplayRating(a) - learnerDisplay)
-    const db = Math.abs(botDisplayRating(b) - learnerDisplay)
+    const da = Math.abs(botDisplayRating(roster, a) - learnerDisplay)
+    const db = Math.abs(botDisplayRating(roster, b) - learnerDisplay)
     return da - db || Date.parse(a.submittedAt) - Date.parse(b.submittedAt)
   })[0]!
 }
 
 /**
- * A bot's display rating: the roster value when the slug is known, otherwise derived from the
- * seeded performance's own theta. The roster wins because it is the authored, designed number.
+ * A bot's display rating: the AUTHORED number from its world's roster, and nothing else.
+ *
+ * There used to be a fallback here — derive the rating from the seeded performance's own theta
+ * when the slug was unknown — and it was the wrong shape of mercy. A slug that is not in its
+ * world's roster means one of exactly two things, and both are bugs: a pool seeded against a
+ * cast that no longer exists (a Japanese match about to seat a bot named Wren), or a roster
+ * fetched for the wrong world. Both produce a match that looks completely normal, which is why
+ * they must not be survivable. The seeds assert the same invariant from the other side.
  */
-export function botDisplayRating(p: PoolPerformance): number {
-  const def = p.botSlug ? botBySlug(p.botSlug) : undefined
-  return def ? def.displayRating : toDisplayScale(p.authorTheta)
+export function botDisplayRating(roster: BotRoster, p: PoolPerformance): number {
+  const def = p.botSlug ? roster.bySlug(p.botSlug) : undefined
+  if (!def) throw unknownBotError(roster, p)
+  return def.displayRating
+}
+
+function unknownBotError(roster: BotRoster, p: PoolPerformance): MatchmakingError {
+  return new MatchmakingError(
+    `bot performance ${p.submissionId} carries bot_slug '${p.botSlug}', which is not in the ` +
+      `roster for world '${roster.worldSlug}' (known: ` +
+      `${roster.bots.map((b) => b.slug).join(', ') || 'none'}). ` +
+      `A bot outside its world's cast must not be seated.`,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -458,6 +530,15 @@ export interface MatchmakingQueries {
   /** `ladders.is_rated` for this ladder. */
   fetchLadderIsRated(ladderSlug: string): Promise<boolean>
 
+  /**
+   * This world's bot cast, from `public.bots`.
+   *
+   * A read, not a constant: the cast is content and it is per-world. An empty roster is a
+   * legal answer (a world whose cast is unauthored can still match humans against humans); a
+   * bot performance with no matching roster row is not, and `chooseOpponent` throws on it.
+   */
+  fetchBotRoster(worldSlug: string): Promise<BotRoster>
+
   /** The challenger's current ability. Null when they have never played this ladder. */
   fetchLearnerTheta(
     userId: string,
@@ -536,9 +617,12 @@ export async function findGhostMatch(
     }
   }
 
-  const [ladderIsRated, theta] = await Promise.all([
+  const [ladderIsRated, theta, roster] = await Promise.all([
     queries.fetchLadderIsRated(input.ladderSlug),
     queries.fetchLearnerTheta(input.userId, input.worldSlug, input.ladderSlug),
+    // The cast of THIS world. Fetched here, next to the ladder and the rating, so the pure
+    // policy below still receives everything it needs as plain values.
+    queries.fetchBotRoster(input.worldSlug),
   ])
   const learnerTheta = theta ?? 0
 
@@ -550,7 +634,9 @@ export async function findGhostMatch(
     limit: POOL_LIMIT,
   })
 
-  const decision = chooseOpponent({ userId: input.userId, theta: learnerTheta }, pool)
+  const decision = chooseOpponent({ userId: input.userId, theta: learnerTheta }, pool, {
+    roster,
+  })
   if (decision.kind === 'none') return { ok: false, reason: 'no_opponent_available' }
 
   const match = buildMatchInsert({
@@ -589,10 +675,8 @@ const defaultNewMatchId = (): string => crypto.randomUUID()
 
 /**
  * `matches`, `match_participants` and the ghost submission copy all require the SERVICE ROLE:
- * there is deliberately no client INSERT policy on any of them.
- *//**
- * `matches`, `match_participants` and the ghost submission copy all require the SERVICE ROLE:
- * there is deliberately no client INSERT policy on any of them.
+ * there is deliberately no client INSERT policy on any of them. `bots` is the exception and is
+ * only READ here — it is public config, like `worlds`.
  */
 export function createMatchmakingQueries(db: SupabaseLike): MatchmakingQueries {
   /** Authors this user has already faced on this item. */
@@ -622,6 +706,34 @@ export function createMatchmakingQueries(db: SupabaseLike): MatchmakingQueries {
       if (error) throw new MatchmakingError(`ladders read failed: ${error.message}`)
       if (!data) throw new MatchmakingError(`unknown ladder '${ladderSlug}'`)
       return data.is_rated as boolean
+    },
+
+    async fetchBotRoster(worldSlug) {
+      // Ordered by sort_order so `roster.bots` is presentable as-is (weakest rung first).
+      // No `is_active` filter: retiring a bot whose performances are still in the pool would
+      // make those performances unseatable, so retirement is a delete plus a pool rewrite,
+      // not a flag. Nothing here is secret — a client with the publishable key may read the
+      // same rows through the "bots: readable by signed-in users" policy.
+      const { data, error } = await db
+        .from('bots')
+        .select('slug, name, display_rating, archetype, self_description, avatar_path, sort_order')
+        .eq('world_slug', worldSlug)
+        .order('sort_order', { ascending: true })
+      if (error) throw new MatchmakingError(`bots read failed: ${error.message}`)
+
+      const rows = (data ?? []) as unknown as BotRow[]
+      return botRoster(
+        worldSlug,
+        rows.map((r) => ({
+          slug: r.slug,
+          name: r.name,
+          displayRating: r.display_rating,
+          // The CHECK on `bots.archetype` is the authority for this set; the cast mirrors it.
+          archetype: r.archetype as BotArchetype,
+          selfDescription: r.self_description,
+          avatarPath: r.avatar_path,
+        })),
+      )
     },
 
     async fetchLearnerTheta(userId, worldSlug, ladderSlug) {
@@ -724,6 +836,17 @@ export function createMatchmakingQueries(db: SupabaseLike): MatchmakingQueries {
       return { matchId }
     },
   }
+}
+
+/** Shape of one `public.bots` row. Replace with the generated types. */
+type BotRow = {
+  slug: string
+  name: string
+  display_rating: number
+  archetype: string
+  self_description: string
+  avatar_path: string | null
+  sort_order: number
 }
 
 /** Shape of one pool row as PostgREST returns it. Replace with the generated types. */
