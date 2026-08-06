@@ -351,7 +351,10 @@ export function PromptComposer({
           onClick={() => submitRef.current()}
           aria-keyshortcuts="Meta+Enter Control+Enter"
         >
-          Submit
+          {/* Not "Submit". The design system requires specific labels, and this
+              action is irreversible: submissions have no UPDATE policy, so the
+              answer is final the moment it lands. The label has to say that. */}
+          Lock in answer
         </Button>
       </div>
     </div>
