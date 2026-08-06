@@ -74,6 +74,13 @@ export default async function Page({
                       world={id}
                       tier="display"
                       as="span"
+                      /* This is the only screen that renders every world at once,
+                         so blocking here would serialise three CJK stylesheets
+                         across two CDNs before anything paints — on the first
+                         screen a user ever sees. The per-language fallback stacks
+                         already show the correct glyph shapes, so this costs a
+                         font swap, not correctness. */
+                      blocking={false}
                       className="text-4xl leading-none text-[color:var(--ink-900)] group-hover:text-[color:var(--gold-300)]"
                     >
                       {world.nativeName}

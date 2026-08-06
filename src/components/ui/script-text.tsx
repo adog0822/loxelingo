@@ -19,16 +19,30 @@ import {
  * three CJK families. React hoists and de-duplicates these links, so
  * rendering it once per text run costs one request per world per session.
  *
- * `precedence` is set deliberately: React blocks paint until the sheet
- * lands. For CJK that is the correct trade, because a flash of fallback
- * glyphs is a flash of the wrong glyph shapes, not just the wrong font.
+ * `precedence` makes React block paint until the sheet lands. Inside a world
+ * that is the right trade: the display glyphs are the LCP element and the
+ * specific face is part of the identity.
+ *
+ * It is the WRONG trade on a screen that shows several worlds at once — the
+ * world-select menu renders all six names, so it mounts every CJK family and
+ * blocks first paint on three stylesheets across two CDNs, on the first screen
+ * a user ever sees.
+ *
+ * The justification for blocking does not hold there either. The fallback
+ * stacks in worlds.ts are already per-language (Hiragino for ja, Apple SD
+ * Gothic Neo for ko, PingFang SC for zh) and `lang` is always set, so a
+ * fallback flash shows the RIGHT glyph shapes in a different face — not the
+ * wrong shapes. `blocking={false}` therefore costs a font swap, not correctness.
  */
 export function WorldFonts({
   world,
   tier = "text",
+  blocking = true,
 }: {
   world: WorldId;
   tier?: ScriptTier;
+  /** Set false where several worlds render at once. See the note above. */
+  blocking?: boolean;
 }) {
   const source = fontSourceForWorld(world, tier);
   if (source === null || source.href === null) return null;
@@ -38,7 +52,13 @@ export function WorldFonts({
       {CJK_FONT_PRECONNECT_ORIGINS.map((origin) => (
         <link key={origin} rel="preconnect" href={origin} crossOrigin="anonymous" />
       ))}
-      <link rel="stylesheet" href={source.href} precedence="loxe-world-fonts" />
+      {blocking ? (
+        <link rel="stylesheet" href={source.href} precedence="loxe-world-fonts" />
+      ) : (
+        // No `precedence`: React does not hoist or block on it, so the glyphs
+        // paint immediately in the per-language fallback and upgrade on arrival.
+        <link rel="stylesheet" href={source.href} media="all" />
+      )}
     </>
   );
 }
@@ -61,6 +81,12 @@ type ScriptTextOwnProps = {
   world: WorldId;
   /** Which face. `display` also suppresses `palt`, where full-width spacing is correct. */
   tier?: ScriptTier;
+  /**
+   * Whether the world's font sheet blocks first paint. Leave true inside a
+   * world. Set false on any screen that renders several worlds at once, where
+   * blocking would serialise one stylesheet per world before anything paints.
+   */
+  blocking?: boolean;
   as?: ElementType;
   className?: string;
   style?: CSSProperties;
@@ -90,6 +116,7 @@ export type ScriptTextProps = ScriptTextOwnProps &
 export function ScriptText({
   world,
   tier = "text",
+  blocking = true,
   as,
   className,
   style,
@@ -101,7 +128,7 @@ export function ScriptText({
 
   return (
     <>
-      <WorldFonts world={world} tier={tier} />
+      <WorldFonts world={world} tier={tier} blocking={blocking} />
       <Tag
         {...rest}
         lang={definition.lang}
