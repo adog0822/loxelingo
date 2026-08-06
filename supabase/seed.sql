@@ -1239,3 +1239,43 @@ end $$;
 -- ladders, `items.external_id`) and on nothing this file creates, so the glob may load it in
 -- either order relative to section 6.
 -- =============================================================================
+
+
+-- =============================================================================
+-- 8. ENGLISH BOT PERFORMANCE POOL — appended section, owned by
+--    supabase/seeds/bot-performances-en.sql
+--
+-- Nothing above this line changes. The English twin of section 6: the bot pool that makes an
+-- `en` duel match startable on a fresh database (5 roster bots x 15 en duel items = 75 stored
+-- performances) lives in
+--   supabase/seeds/bot-performances-en.sql
+-- and is loaded by `npx supabase db reset` through the same config.toml entry section 6
+-- documents:
+--   [db.seed] sql_paths = ["./seed.sql", "./seeds/*.sql"]
+--
+-- ONE THING TO KNOW BEFORE READING IT, and the reason this note exists at all.
+--
+-- Sections 6 and 7 both rest on a convention: a file in ./seeds may depend on THIS file, which
+-- config.toml names explicitly and first, and on nothing else in ./seeds. The English bot pool
+-- is the first file that cannot obey it — it resolves items by `items.external_id`, and the
+-- English items are created by a SIBLING, ./seeds/english-content.sql. The CLI expands
+-- `./seeds/*.sql` in sorted order:
+--
+--   seed.sql  ->  bot-performances-en.sql  ->  bot-performances.sql  ->  english-content.sql
+--
+-- so the English pool runs BEFORE the items it needs exist. It handles that itself: the
+-- population is wrapped in a function and, when the items are not loaded yet, a one-shot
+-- self-removing statement trigger on `public.items` runs it the moment english-content.sql
+-- inserts them, then deletes itself and the function. A completed reset leaves a full pool and
+-- no residue.
+--
+-- That is a workaround, and its own §L says so. The permanent fix is one line in config.toml,
+-- which neither file is permitted to touch:
+--
+--   sql_paths = ["./seed.sql", "./seeds/english-content.sql", "./seeds/*.sql"]
+--
+-- Naming english-content.sql before the glob makes it load first; the glob then re-lists it and
+-- re-running it is a no-op by its own idempotency. Once that lands, delete §T of
+-- bot-performances-en.sql — the direct call at the top of §T is the only path that will ever
+-- run again, and the trigger becomes dead code.
+-- =============================================================================
