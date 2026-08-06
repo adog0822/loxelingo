@@ -1,0 +1,88 @@
+/* ============================================================
+   Motion
+   docs/design/design-system.md §4
+
+   The world breathes; the instrument does not. Ambient motion
+   lives only in the sky layer. Nothing animates during a timed
+   prompt. Only transform and opacity are ever animated.
+   ============================================================ */
+
+/* Haze drift: two offset gradient layers at 34s and 51s. */
+@keyframes loxe-haze-drift-a {
+  from {
+    transform: translate3d(-4%, 0, 0);
+  }
+  50% {
+    transform: translate3d(4%, -1.5%, 0);
+  }
+  to {
+    transform: translate3d(-4%, 0, 0);
+  }
+}
+
+@keyframes loxe-haze-drift-b {
+  from {
+    transform: translate3d(5%, 1%, 0);
+  }
+  50% {
+    transform: translate3d(-5%, -1%, 0);
+  }
+  to {
+    transform: translate3d(5%, 1%, 0);
+  }
+}
+
+/* Orrery globe rotation. Referenced by WorldOrrery when it lands. */
+@keyframes loxe-globe-spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(360deg);
+  }
+}
+
+/* Star ignition: opacity plus a scale on the glow layer only. */
+@keyframes loxe-ignite {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@layer components {
+  /* Ambient motion is opt-in and switchable off in one place: the
+     match screen sets data-frozen, and reduced-motion kills it. */
+  [data-ambient="haze-a"] {
+    animation: loxe-haze-drift-a 34s linear infinite;
+  }
+  [data-ambient="haze-b"] {
+    animation: loxe-haze-drift-b 51s linear infinite;
+  }
+
+  /* The world visibly freezes when a match starts. */
+  [data-frozen="true"] [data-ambient],
+  [data-frozen="true"][data-ambient] {
+    animation: none !important;
+  }
+
+  /* The timer bar is --gold-500 until 20% remaining, then
+     --signal-warn. A colour step, never a pulse. */
+  [data-timer-phase="normal"] {
+    --timer-color: var(--accent);
+  }
+  [data-timer-phase="warn"] {
+    --timer-color: var(--signal-warn);
+  }
+
+  /* Glass is used exactly twice: the match HUD and the sheet over
+     the sky. Every other surface is opaque tinted indigo. */
+  [data-glass] {
+    background: color-mix(in oklab, var(--surface-2) 72%, transparent);
+    backdrop-filter: blur(20px) saturate(1.1);
+  }
+}

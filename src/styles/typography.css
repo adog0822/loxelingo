@@ -1,0 +1,196 @@
+/* ============================================================
+   Typography
+   docs/design/design-system.md §3
+
+   Script rendering rules here are load-bearing, not cosmetic.
+   `lang` is mandatory on every element containing CJK: `lang="ja"`
+   and `lang="zh-Hans"` select different glyph shapes for shared
+   codepoints. The mechanism that guarantees it is <ScriptText>
+   in src/components/ui/script-text.tsx; these rules are what it
+   hangs on.
+   ============================================================ */
+
+@layer base {
+  /* Every numeral in the product carries tabular + lining figures.
+     Set on the root so it inherits and cannot be forgotten: a rating
+     that shifts width while counting is a layout bug and a
+     credibility bug. */
+  :root {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+
+  /* Kept from the spec as explicit documentation of intent, and so
+     that any element that opts out above can opt back in. */
+  .num,
+  .rating,
+  .rank,
+  .delta,
+  time,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+
+  /* Script rendering. */
+  :lang(ja),
+  :lang(ko),
+  :lang(zh) {
+    /* Never apply negative letter-spacing to CJK. */
+    letter-spacing: 0 !important;
+    line-break: strict;
+    word-break: normal;
+    overflow-wrap: normal;
+    line-height: 1.8; /* CJK body */
+  }
+
+  /* "palt" fixes full-width punctuation gaps in Japanese body text.
+     Hangul does not need it and must not receive it. */
+  :lang(ja) {
+    font-feature-settings: "palt" 1, "tnum" 1, "lnum" 1;
+  }
+
+  /* Full-width spacing is correct at display sizes, so palt comes off
+     there. ScriptText writes data-script-tier; nothing else should. */
+  :lang(ja)[data-script-tier="display"],
+  :lang(zh)[data-script-tier="display"],
+  :lang(ja) [data-script-tier="display"],
+  :lang(zh) [data-script-tier="display"] {
+    font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+
+  /* CJK display line-height is 1.15; body is 1.8. */
+  [data-script="cjk"][data-script-tier="display"] {
+    line-height: 1.15;
+  }
+
+  ruby {
+    ruby-position: over;
+  }
+  ruby > rt {
+    font-size: 0.42em;
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+
+  ::selection {
+    background: var(--selection);
+  }
+}
+
+/* ------------------------------------------------------------
+   Type roles. One class per row of the §3.4 scale, carrying size,
+   line-height, tracking and weight together so a caller cannot
+   apply half of a role. Utilities still win (these sit in the
+   components layer).
+   ------------------------------------------------------------ */
+@layer components {
+  .t-glyph {
+    font-family: var(--font-display);
+    font-size: var(--t-glyph);
+    line-height: 1;
+    letter-spacing: 0;
+    font-weight: 500;
+  }
+
+  .t-display-1 {
+    font-family: var(--font-display);
+    font-size: var(--t-display-1);
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    font-weight: 600;
+  }
+
+  .t-display-2 {
+    font-family: var(--font-display);
+    font-size: var(--t-display-2);
+    line-height: 1.06;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+  }
+
+  .t-display-3 {
+    font-family: var(--font-display);
+    font-size: var(--t-display-3);
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+    font-weight: 500;
+  }
+
+  .t-title-1 {
+    font-size: var(--t-title-1);
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+    font-weight: var(--weight-header, 500);
+  }
+
+  .t-title-2 {
+    font-size: var(--t-title-2);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    font-weight: var(--weight-header, 500);
+  }
+
+  .t-title-3 {
+    font-size: var(--t-title-3);
+    line-height: 1.4;
+    letter-spacing: 0;
+    font-weight: var(--weight-header, 500);
+  }
+
+  .t-body-lg {
+    font-size: var(--t-body-lg);
+    line-height: 1.6;
+    font-weight: 400;
+  }
+
+  .t-body {
+    font-size: var(--t-body);
+    line-height: 1.55;
+    font-weight: 400;
+  }
+
+  .t-body-sm {
+    font-size: var(--t-body-sm);
+    line-height: 1.5;
+    font-weight: 400;
+  }
+
+  /* One of exactly two permitted eyebrow-shaped elements:
+     the match constraint line, and the band label under a rating. */
+  .t-label {
+    font-size: var(--t-label);
+    line-height: 1.3;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+
+  /* Ratings and ranks use the display face, never mono. Mono ratings
+     read as terminal output; display ratings read as a score. */
+  .t-num-hero {
+    font-family: var(--font-display);
+    font-size: var(--t-num-hero);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+
+  .t-num {
+    font-family: var(--font-display);
+    font-size: var(--t-num);
+    line-height: 1.2;
+    letter-spacing: 0;
+    font-weight: 500;
+  }
+
+  /* Mono is reserved for timers, match IDs, replay counters, and the
+     ladder's rank column. That is the whole list. */
+  .t-mono {
+    font-family: var(--font-mono);
+    font-size: var(--t-mono);
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+    font-weight: 400;
+  }
+}

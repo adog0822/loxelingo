@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@import "../styles/tokens.css";
+@import "../styles/typography.css";
+@import "../styles/motion.css";
+@import "../styles/base.css";
+
+/* ============================================================
+   Tailwind v4 theme. CSS-first config; there is no
+   tailwind.config.ts in this project and there should not be one.
+   docs/design/design-system.md §9.2
+   ============================================================ */
+@theme inline {
+  /* Literal font names. @theme inline resolves at parse time, so a
+     var(--font-*) self-reference here silently breaks font loading.
+     --ff-geist-mono is a distinct name supplied by next/font, so
+     referencing it is safe. */
+  --font-display: "Söhne Breit", "Clash Display", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Söhne", "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Söhne Mono", var(--ff-geist-mono, "Geist Mono"), ui-monospace,
+    SFMono-Regular, monospace;
+
+  --color-canvas: var(--canvas);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-hairline: var(--hairline);
+  --color-border: var(--border);
+  --color-fg: var(--text-primary);
+  --color-fg-muted: var(--text-secondary);
+  --color-fg-subtle: var(--text-tertiary);
+  --color-fg-disabled: var(--text-disabled);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-on: var(--accent-on);
+  --color-accent-pressed: var(--accent-pressed);
+
+  --color-ink-000: #05060f;
+  --color-ink-050: #090c1b;
+  --color-ink-100: #0d1226;
+  --color-ink-200: #141a33;
+  --color-ink-300: #1c2442;
+  --color-ink-400: #283154;
+  --color-ink-500: #3a4570;
+  --color-ink-600: #5a6796;
+  --color-ink-650: #6f7ca8;
+  --color-ink-700: #8792bc;
+  --color-ink-800: #b9c1dc;
+  --color-ink-900: #e8ebf7;
+
+  --color-gold-100: #fff1e8;
+  --color-gold-200: #fbd9c4;
+  --color-gold-300: #f5bca0;
+  --color-gold-400: #ec9e7e;
+  --color-gold-500: #dd7f62;
+  --color-gold-600: #be5f4c;
+  --color-gold-700: #8e4239;
+  --color-gold-800: #5c2a28;
+  --color-gold-900: #2e1a1e;
+
+  --color-win: var(--verdict-win);
+  --color-loss: var(--verdict-loss);
+  --color-draw: var(--verdict-draw);
+  --color-error: var(--signal-error);
+  --color-warn: var(--signal-warn);
+  --color-info: var(--signal-info);
+
+  /* World hue encodes place. It never encodes state, correctness,
+     rank or data. */
+  --color-world: var(--world-atmos);
+  --color-world-mark: var(--world-mark);
+  --color-world-deep: var(--world-deep);
+  --color-world-ja: var(--world-ja-atmos);
+  --color-world-ja-mark: var(--world-ja-mark);
+  --color-world-ko: var(--world-ko-atmos);
+  --color-world-ko-mark: var(--world-ko-mark);
+  --color-world-zh: var(--world-zh-atmos);
+  --color-world-zh-mark: var(--world-zh-mark);
+  --color-world-es: var(--world-es-atmos);
+  --color-world-es-mark: var(--world-es-mark);
+  --color-world-fr: var(--world-fr-atmos);
+  --color-world-fr-mark: var(--world-fr-mark);
+  --color-world-de: var(--world-de-atmos);
+  --color-world-de-mark: var(--world-de-mark);
+
+  /* Max three series. Four or more is not permitted; cross-world
+     comparison uses small multiples with direct labels. */
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+
+  --text-glyph: var(--t-glyph);
+  --text-display-1: var(--t-display-1);
+  --text-display-2: var(--t-display-2);
+  --text-display-3: var(--t-display-3);
+  --text-title-1: var(--t-title-1);
+  --text-title-2: var(--t-title-2);
+  --text-title-3: var(--t-title-3);
+  --text-body-lg: var(--t-body-lg);
+  --text-body: var(--t-body);
+  --text-body-sm: var(--t-body-sm);
+  --text-num-hero: var(--t-num-hero);
+  --text-num: var(--t-num);
+  --text-label: var(--t-label);
+  --text-mono: var(--t-mono);
+
+  /* Exactly four radii. */
+  --radius: 8px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 12px;
+  --radius-xl: 999px;
+
+  --spacing: 4px;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-atmos: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Motion durations stay as the --dur-* custom properties in
+   tokens.css and are used as duration-[var(--dur-base)] or inside
+   component CSS. Z-indexes stay as --z-* and are used as
+   z-[var(--z-hud)], so a z-index can never be an arbitrary number. */

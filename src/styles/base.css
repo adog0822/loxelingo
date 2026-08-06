@@ -1,0 +1,200 @@
+/* ============================================================
+   Base layer + accessibility paths
+   docs/design/design-system.md §4.5, §7.4, §8.1
+
+   A dark build with no reduced-motion, reduced-transparency, or
+   increased-contrast handling is on the ban list. All three are
+   implemented below.
+   ============================================================ */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--canvas);
+    color: var(--text-primary);
+    font-family: var(--font-text);
+    font-size: var(--t-body);
+    line-height: 1.55;
+    font-weight: 400;
+    min-height: 100dvh; /* never h-screen */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Focus ring reads on both dark surfaces and the bright
+     celestial body: 2px accent ring plus a 2px offset ring. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--focus-offset);
+  }
+
+  /* Depth on Night comes from surface steps, hairlines, background
+     blur and an inset top highlight. No drop shadows. */
+  [data-raised] {
+    box-shadow: var(--highlight-inset);
+  }
+}
+
+@layer components {
+  /* Fixed film grain. Never on a scrolling container. */
+  [data-grain] {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-grain);
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    mix-blend-mode: overlay;
+  }
+
+  /* ----------------------------------------------------------
+     Button. Pill, one accent, no gradient, no glow halo.
+     See src/components/ui/button.tsx.
+     ---------------------------------------------------------- */
+  .loxe-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    border-radius: var(--r-full);
+    border: 1px solid transparent;
+    font-family: var(--font-text);
+    font-weight: 500;
+    white-space: nowrap;
+    user-select: none;
+    transition:
+      transform var(--dur-micro) var(--ease-out-quint),
+      background-color var(--dur-fast) var(--ease-out-quint),
+      border-color var(--dur-fast) var(--ease-out-quint),
+      color var(--dur-fast) var(--ease-out-quint);
+  }
+
+  /* Touch targets stay at or above 44px on the primary size. */
+  .loxe-button--md {
+    min-height: 48px;
+    padding-inline: var(--sp-6);
+    font-size: var(--t-body);
+  }
+  .loxe-button--sm {
+    min-height: 40px;
+    padding-inline: var(--sp-4);
+    font-size: var(--t-body-sm);
+  }
+
+  /* Hover moves nothing. The press is the only transform. */
+  .loxe-button:active:not(:disabled) {
+    transform: scale(0.985);
+  }
+
+  .loxe-button--primary {
+    background: var(--accent);
+    color: var(--accent-on);
+  }
+  .loxe-button--primary:hover:not(:disabled) {
+    background: var(--gold-400);
+  }
+  .loxe-button--primary:active:not(:disabled) {
+    background: var(--accent-pressed);
+  }
+
+  .loxe-button--ghost {
+    background: transparent;
+    color: var(--text-primary);
+    border-color: var(--border);
+  }
+  .loxe-button--ghost:hover:not(:disabled) {
+    border-color: var(--accent-text);
+    color: var(--accent-text);
+  }
+
+  .loxe-button--quiet {
+    background: transparent;
+    color: var(--text-secondary);
+  }
+  .loxe-button--quiet:hover:not(:disabled) {
+    color: var(--text-primary);
+  }
+
+  .loxe-button:disabled {
+    pointer-events: none;
+    background: var(--ink-500);
+    color: var(--text-disabled);
+    border-color: transparent;
+  }
+  [data-theme="dusk"] .loxe-button:disabled {
+    background: var(--surface-2);
+  }
+
+  /* Hairlines separate rows and are decorative (--hairline / ink-400).
+     A border that tells you where an input begins is functional
+     (--border / ink-600, 3:1 minimum per WCAG 1.4.11). These are not
+     interchangeable. */
+  [data-hairline] {
+    border-color: var(--hairline);
+  }
+}
+
+/* ============================================================
+   Reduced motion
+   The verdict keeps its five beats; only the movement is removed.
+   Collapsing the verdict to a single instant would remove the
+   design's most important function.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  [data-verdict-beat] {
+    transition: opacity var(--dur-beat) var(--ease-standard) !important;
+    transform: none !important;
+  }
+
+  [data-ambient] {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   Reduced transparency
+   The two glass surfaces become solid.
+   ============================================================ */
+@media (prefers-reduced-transparency: reduce) {
+  [data-glass] {
+    backdrop-filter: none;
+    background: var(--surface-2);
+  }
+}
+
+/* ============================================================
+   Increased contrast
+   Hairlines step up, grain is removed, and haze is capped so text
+   never sits over dense atmosphere.
+   ============================================================ */
+@media (prefers-contrast: more) {
+  :root,
+  [data-theme="night"] {
+    --hairline: var(--ink-600);
+  }
+
+  [data-theme="dusk"] {
+    --hairline: #b9836a;
+  }
+
+  [data-grain] {
+    display: none;
+  }
+
+  [data-world] {
+    --haze: min(0.4, calc(0.94 - (var(--altitude) * 0.92)));
+  }
+}
