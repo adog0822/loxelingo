@@ -294,8 +294,17 @@
    family through --ff-geist-mono (see src/lib/design/fonts.ts).
    ============================================================ */
 :root {
-  --font-display: "Söhne Breit", "Clash Display", ui-sans-serif, system-ui, sans-serif;
-  --font-text: "Söhne", "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  /* One family, two roles, separated by the wdth axis rather than by two
+     downloads. Display runs wide (Breit posture), text runs normal. Clash
+     Display was removed because its free release has no tabular figures and
+     no weight 600 — see src/lib/design/fonts.ts for the measurements. */
+  --font-display: var(--ff-archivo, ui-sans-serif), system-ui, sans-serif;
+  --font-text: var(--ff-archivo, ui-sans-serif), system-ui, sans-serif;
+  /* The two-zone dial, made typographic. The world is wide and atmospheric;
+     the instrument is narrow and precise. */
+  --wdth-display: 112;
+  --wdth-text: 100;
+  --wdth-instrument: 92;
   --font-mono: "Söhne Mono", var(--ff-geist-mono, "Geist Mono"), ui-monospace,
     SFMono-Regular, monospace;
 

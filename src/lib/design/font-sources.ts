@@ -17,10 +17,10 @@
  */
 
 /** Origins worth a preconnect from the root layout. */
-export const FONT_PRECONNECT_ORIGINS = [
-  "https://api.fontshare.com",
-  "https://cdn.fontshare.com",
-] as const;
+/* Empty by design. The Latin faces are self-hosted by next/font (Archivo +
+   Geist Mono), so there is no third-party origin on the critical path at all.
+   Only CJK worlds reach out, and only once entered. */
+export const FONT_PRECONNECT_ORIGINS = [] as const;
 
 /** Origins only touched once a CJK world is entered. */
 export const CJK_FONT_PRECONNECT_ORIGINS = [
@@ -33,8 +33,8 @@ export const CJK_FONT_PRECONNECT_ORIGINS = [
  * Clash Display (display) + Satoshi (text). Weights limited to the ones
  * the type scale actually uses: 400/500/600 display, 400/500/700 text.
  */
-export const LATIN_WEBFONT_HREF =
-  "https://api.fontshare.com/v2/css?f%5B%5D=clash-display@400,500,600&f%5B%5D=satoshi@400,500,700&display=swap";
+/* REMOVED: the Fontshare stylesheet. Archivo is self-hosted through
+   next/font/google, which removes a render-blocking third-party request. */
 
 /** Which face a piece of text needs. */
 export type ScriptTier = "display" | "text" | "immersion";

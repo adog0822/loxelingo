@@ -43,6 +43,12 @@ import {
   settleMatch,
   type SettleStore,
 } from '@/lib/match/settle'
+import { retry } from '@/lib/match/judge-queue-policy'
+
+
+let judgeStore: JudgeStore | undefined
+let settleStore: SettleStore | undefined
+let goldStore: GoldSetStore | undefined
 
 export const maxDuration = 300
 
@@ -55,83 +61,6 @@ export const maxDuration = 300
  */
 const VISIBILITY_TIMEOUT_SECONDS = 600
 
-/**
- * Deliveries after which the message is a poison pill and gets dropped.
- * `deliveryCount` starts at 1, so this permits ~5 attempts.
- */
-export const MAX_DELIVERIES = 5
-
-/** Backoff ceiling, in seconds. */
-const MAX_BACKOFF_SECONDS = 300
-
-/**
- * Errors where redelivery cannot possibly change the outcome. All of them leave
- * the match released back to `awaiting_opponent` by the runner, so acknowledging
- * loses the message but not the match.
- */
-function isPermanent(error: unknown): boolean {
-  return (
-    error instanceof UnknownMatch ||
-    // A transition that isn't in LEGAL_TRANSITIONS is a bug. Retrying a bug just
-    // reproduces it four more times.
-    error instanceof IllegalMatchTransition ||
-    // Ratings are frozen until kappa clears the gate. That is a human action.
-    error instanceof JudgeNotCalibrated
-  )
-}
-
-/**
- * Retry policy.
- *
- * Exponential backoff on transient failures, an immediate drop on permanent
- * ones, and a hard stop after `MAX_DELIVERIES` so a message that fails forever
- * does not occupy a consumer forever. Every drop is logged with the match id,
- * because an acknowledged failure is otherwise completely silent.
- *
- * Note what is NOT here: `JudgeBudgetExhausted` never reaches this function.
- * The runner catches it, releases the match and returns normally, so the message
- * is acknowledged on the success path — retrying before the AI budget resets is
- * pointless, and the distinction from `JudgeRateLimited` (which IS rethrown, and
- * lands here) is the whole reason the two are separate error classes.
- */
-export function retry(error: unknown, metadata: MessageMetadata): RetryDirective | void {
-  const { deliveryCount, messageId } = metadata
-
-  if (isPermanent(error)) {
-    console.error(
-      `[${JUDGE_TOPIC}] dropping message ${messageId} after delivery ${deliveryCount}: permanent failure`,
-      error,
-    )
-    return { acknowledge: true }
-  }
-
-  if (deliveryCount >= MAX_DELIVERIES) {
-    console.error(
-      `[${JUDGE_TOPIC}] dropping poison message ${messageId} after ${deliveryCount} deliveries.`,
-      error,
-    )
-    return { acknowledge: true }
-  }
-
-  // The judge told us how long to wait; honour it, but never go below the
-  // backoff we would have chosen anyway.
-  const backoff = Math.min(MAX_BACKOFF_SECONDS, 2 ** deliveryCount * 5)
-  const afterSeconds =
-    error instanceof JudgeRateLimited && error.retryAfterSeconds
-      ? Math.min(MAX_BACKOFF_SECONDS, Math.max(backoff, error.retryAfterSeconds))
-      : backoff
-
-  console.warn(
-    `[${JUDGE_TOPIC}] retrying message ${messageId} (delivery ${deliveryCount}) in ${afterSeconds}s`,
-    error,
-  )
-  return { afterSeconds }
-}
-
-// Built once per lambda instance rather than per message.
-let judgeStore: JudgeStore | undefined
-let settleStore: SettleStore | undefined
-let goldStore: GoldSetStore | undefined
 
 async function handler(job: JudgeJob, metadata: MessageMetadata): Promise<void> {
   judgeStore ??= createSupabaseJudgeStore()
@@ -182,7 +111,24 @@ async function handler(job: JudgeJob, metadata: MessageMetadata): Promise<void> 
   )
 }
 
-export const POST = handleCallback<JudgeJob>(handler, {
+const callback = handleCallback<JudgeJob>(handler, {
   visibilityTimeoutSeconds: VISIBILITY_TIMEOUT_SECONDS,
   retry,
 })
+
+/**
+ * Wrapped rather than exported directly.
+ *
+ * `handleCallback` returns a function whose parameter is typed
+ * `CallbackRequestInput` (`Request | { request: Request }`), but Next 16
+ * validates that a route handler's first parameter is exactly
+ * `Request | NextRequest`. Exporting the callback as `POST` therefore fails the
+ * GENERATED route type check in `.next/types` — which `tsc --noEmit` never sees,
+ * because it does not typecheck that directory. `next build` does.
+ *
+ * The cast is safe in the direction that matters: the SDK accepts a bare
+ * `Request` at runtime, and we only ever hand it one.
+ */
+export async function POST(request: Request): Promise<Response> {
+  return callback(request as Parameters<typeof callback>[0])
+}

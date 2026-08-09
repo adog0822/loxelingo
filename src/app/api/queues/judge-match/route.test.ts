@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MessageMetadata } from '@vercel/queue'
-import { MAX_DELIVERIES, POST, maxDuration, retry } from './route'
+import { POST, maxDuration } from './route'
+import { MAX_DELIVERIES, retry } from '@/lib/match/judge-queue-policy'
 import { JudgeBudgetExhausted, JudgeRateLimited } from '@/lib/judge/judge'
 import { JudgeNotCalibrated } from '@/lib/judge/calibration'
 import { IllegalMatchTransition } from '@/lib/match/settle'

@@ -2,8 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 import {
   FONT_PRECONNECT_ORIGINS,
-  LATIN_WEBFONT_HREF,
-  monoFont,
+  fontRootClassName,
 } from "@/lib/design/fonts";
 
 import "./globals.css";
@@ -40,12 +39,11 @@ export const viewport: Viewport = {
  */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" data-theme="night" className={monoFont.variable}>
+    <html lang="en" data-theme="night" className={fontRootClassName}>
       <body className="min-h-[100dvh] antialiased">
         {FONT_PRECONNECT_ORIGINS.map((origin) => (
           <link key={origin} rel="preconnect" href={origin} crossOrigin="anonymous" />
         ))}
-        <link rel="stylesheet" href={LATIN_WEBFONT_HREF} precedence="loxe-latin-fonts" />
 
         {children}
 
