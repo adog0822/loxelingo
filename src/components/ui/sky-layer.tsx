@@ -124,8 +124,12 @@ export function SkyLayer({ frozen = false, parallax = true, className }: SkyLaye
             "translate3d(-50%, calc(var(--body-y) - 50%), 0) scale(var(--body-scale))",
           transformOrigin: "50% 50%",
           borderRadius: "var(--r-full)",
+          // Invisible below Ridge, where §5.2 says no body exists yet.
+          opacity: "var(--body-op, 1)",
+          // Fallback is --world-deep, not --ink-800. The old light-grey fallback
+          // meant any surface without a [data-world] painted a pale disc.
           background:
-            "radial-gradient(circle at 50% 42%, var(--world-atmos, var(--ink-800)) 0%, var(--world-atmos, var(--ink-800)) 58%, color-mix(in oklab, var(--world-atmos, var(--ink-800)) 40%, transparent) 74%, transparent 78%)",
+            "radial-gradient(circle at 50% 42%, var(--world-atmos, var(--world-deep, transparent)) 0%, var(--world-atmos, var(--world-deep, transparent)) 58%, color-mix(in oklab, var(--world-atmos, var(--world-deep, transparent)) 40%, transparent) 74%, transparent 78%)",
         }}
       />
 

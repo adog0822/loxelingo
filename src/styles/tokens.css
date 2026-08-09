@@ -98,10 +98,22 @@
   --series-2: #005fc6;
   --series-3: #00a0a3;
 
-  /* --- atmosphere composition (Night: haze is blue mist) --- */
+  /* --- atmosphere composition (Night: haze is blue mist) ---
+     HAZE MUST NOT BE A SURFACE TOKEN. This was `20 26 51`, i.e. #141A33, which
+     is byte-identical to --ink-200. The whole atmospheric system was therefore
+     painting one surface step (~1.08:1) over the canvas and was invisible at
+     every altitude, including 0.94 opacity at the valley floor. The design's
+     central promise was fully specified, fully implemented, and unseeable.
+
+     Two rules, so it cannot regress:
+       1. Haze sits at least ~2.5:1 against --canvas. It is a luminous veil, not
+          a darker panel.
+       2. Haze moves in HUE as well as lightness. Real atmosphere scatters blue,
+          so this sits near 214deg while the ink ramp is violet-leaning navy at
+          ~226deg. Lightness alone reads as fog-coloured furniture. */
   --sky-top: var(--ink-050);
   --sky-bottom: var(--ink-100);
-  --haze-color: 20 26 51;
+  --haze-color: 62 92 143;
   --star-color: 251 217 196; /* --gold-200 */
   --rim-rgb: 92 42 40; /* --gold-800 */
 }
@@ -148,10 +160,14 @@
   --series-2: #0058c4;
   --series-3: #00899d;
 
-  /* Dusk: haze is warm dust, thinning reveals a clear rose sky. */
+  /* Dusk: haze is warm dust, thinning reveals a clear rose sky.
+     Same bug as Night, inverted: this was `243 217 201` (#F3D9C9), byte-identical
+     to the Dusk --canvas, so the atmosphere was invisible here too. On a light
+     canvas aerial perspective goes toward the light, so haze is LIGHTER than the
+     canvas and shifts warm, rather than darker as on Night. */
   --sky-top: #f7e6da;
   --sky-bottom: #f3d9c9;
-  --haze-color: 243 217 201;
+  --haze-color: 254 244 235;
   --star-color: 142 66 57;
   --rim-rgb: 142 66 57;
 }
@@ -188,6 +204,14 @@
 [data-world] {
   --haze: calc(0.94 - (var(--altitude) * 0.92));
   --body-scale: calc(0.04 + (var(--altitude) * 0.68));
+  /* The body does not exist below Ridge. §5.2 gives Valley Floor and Treeline
+     bodyFrame 0, and Ridge is the band where the celestial body first appears.
+     --body-scale bottoms out at 0.04 rather than 0, so without this the body
+     rendered as a small disc at every altitude — including on the world-select
+     screen, where no [data-world] is set and the fill fell back to a LIGHT grey,
+     producing a pale dot in a dark sky that read as a loading spinner.
+     Ridge is rating 1100 => altitude (1100-700)/1500 = 0.267. */
+  --body-op: clamp(0, calc((var(--altitude) - 0.267) * 4), 1);
   --body-y: calc(112% - (var(--altitude) * 74%));
   --deck-y: calc(96% - (var(--altitude) * 62%));
   --star-op: var(--altitude);
