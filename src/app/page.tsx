@@ -1,7 +1,7 @@
 import { SkyLayer } from '@/components/ui/sky-layer'
-import { ScriptText } from '@/components/ui/script-text'
-import { enterWorld } from '@/lib/actions/enter-world'
-import { WORLDS, WORLD_IDS, langForWorld, type WorldId } from '@/lib/design/worlds'
+import { QuietWorld, WorldChoice } from '@/components/world/world-choice'
+import { WorldField } from '@/components/world/world-field'
+import { WORLD_IDS, langForWorld, type WorldId } from '@/lib/design/worlds'
 import { getSessionState } from '@/lib/auth/session'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 
@@ -31,6 +31,21 @@ async function launchedWorlds(): Promise<ReadonlySet<WorldId>> {
   return new Set(WORLD_IDS.filter((id) => slugs.has(langForWorld(id))))
 }
 
+/**
+ * World select.
+ * docs/design/design-system.md §6.1, docs/design/discovery-taste.md §3.2-§3.4
+ *
+ * Each open world is a body, turning once every 90 seconds, lit by its own
+ * three hue tokens. All of them are drawn by one shader into one canvas
+ * (src/components/world/world-field.tsx); the rows here are plain server-
+ * rendered HTML that leaves a slot for each body, so the page is complete and
+ * the forms work before any of that arrives, or if it never does.
+ *
+ * The composition is asymmetric on purpose: the type block holds the left,
+ * the bodies run down and to the right of it, and the closed worlds sit small
+ * and quiet under a hairline. No tiles, no grid, no icons, no badges — and
+ * nothing in the copy names what is being rendered.
+ */
 export default async function Page({
   searchParams,
 }: {
@@ -47,20 +62,27 @@ export default async function Page({
   const closed = WORLD_IDS.filter((id) => !launched.has(id))
 
   return (
-    <main className="relative isolate min-h-dvh">
+    <main className="relative isolate min-h-dvh overflow-hidden">
       <SkyLayer />
 
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center gap-14 px-6 py-24">
-        <header className="flex max-w-[34ch] flex-col gap-4">
-          <h1 className="text-[clamp(2.5rem,7vw,3.5rem)] leading-[1.02] tracking-[-0.03em] text-[color:var(--ink-900)]">
+      {/* Gutters from the taste review's measured table: 20px at 375, 24 at
+          390-430, 40 at 768, 64 at 1024 and then the 1200px grid maximum. */}
+      <div
+        className="relative mx-auto flex min-h-dvh w-full max-w-[1200px] flex-col justify-center gap-14 px-5 py-20 sm:px-6 md:gap-24 md:px-10 md:py-28 lg:px-16"
+        style={{ zIndex: 'var(--z-content)' }}
+      >
+        <header className="flex max-w-[30ch] flex-col gap-4">
+          {/* At 375 exactly one element is allowed to be big, and on this
+              screen that is the native script, not this line. */}
+          <h1 className="text-[clamp(1.625rem,3.6vw,3.25rem)] font-medium leading-[1.1] tracking-[-0.025em] text-[color:var(--ink-900)]">
             Not a student. Ranked.
           </h1>
-          <p className="text-[color:var(--ink-700)]">
+          <p className="max-w-[34ch] text-[1rem] leading-[1.55] text-[color:var(--ink-700)]">
             Pick one. You play your first match now. No account until you have
             something worth keeping.
           </p>
           {session.status === 'guest' ? (
-            <p className="text-sm text-[color:var(--ink-650)]">
+            <p className="text-[0.875rem] leading-[1.5] text-[color:var(--ink-650)]">
               Playing as a guest. Your rating is being saved.
             </p>
           ) : null}
@@ -69,95 +91,29 @@ export default async function Page({
         {message ? (
           <p
             role="alert"
-            className="border-l border-[color:var(--signal-warn)] pl-4 text-sm text-[color:var(--ink-700)]"
+            className="border-l border-[color:var(--signal-warn)] pl-4 text-[0.875rem] leading-[1.5] text-[color:var(--ink-700)]"
           >
             {message}
           </p>
         ) : null}
 
-        <ul className="flex flex-col gap-2">
-          {open.map((id) => {
-            const world = WORLDS[id]
-            return (
-              <li key={id}>
-                <form action={enterWorld}>
-                  <input type="hidden" name="world" value={id} />
-                  {/*
-                    Name and label sit TOGETHER. They were previously at opposite
-                    ends of a full-width row, which put ~560px between 日本 and
-                    the word naming it — the label read as belonging to the next
-                    world, not this one. Proximity is the grouping signal; a
-                    hairline is not a substitute for it.
-                  */}
-                  <button
-                    type="submit"
-                    data-world={id}
-                    className="group flex w-full items-baseline gap-5 rounded-[4px] px-2 py-5 text-left transition-[background-color] duration-[var(--dur-fast,180ms)] hover:bg-[color:var(--ink-200)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--gold-400)]"
-                  >
-                    <ScriptText
-                      world={id}
-                      tier="display"
-                      as="span"
-                      /* The only screen rendering every world at once. Blocking
-                         here would serialise CJK stylesheets across two CDNs
-                         before anything paints, on the first screen a user ever
-                         sees. The per-language fallback stacks already show the
-                         correct glyph shapes, so this costs a swap, not
-                         correctness. */
-                      blocking={false}
-                      className="text-[clamp(1.75rem,5vw,2.25rem)] leading-none text-[color:var(--ink-900)] transition-colors duration-[var(--dur-fast,180ms)] group-hover:text-[color:var(--world-atmos,var(--gold-300))]"
-                    >
-                      {world.nativeName}
-                    </ScriptText>
-
-                    <span className="flex min-w-0 flex-col gap-0.5">
-                      <span className="text-sm text-[color:var(--ink-800)]">
-                        {world.latinName}
-                      </span>
-                      <span className="truncate text-xs text-[color:var(--ink-650)]">
-                        {world.concept}
-                      </span>
-                    </span>
-                  </button>
-                </form>
-              </li>
-            )
-          })}
-        </ul>
-
-        {closed.length > 0 ? (
-          /*
-            Not yet open. No padlock, no "coming soon" badge, no countdown — the
-            row is simply quieter and does not respond to the cursor. Absence of
-            affordance is the message; anything louder turns a gap in the content
-            into a marketing surface.
-          */
-          <ul className="flex flex-col gap-1 border-t border-[color:var(--ink-400)] pt-6">
-            {closed.map((id) => {
-              const world = WORLDS[id]
-              return (
-                <li
-                  key={id}
-                  className="flex items-baseline gap-5 px-2 py-2 opacity-40"
-                  aria-disabled="true"
-                >
-                  <ScriptText
-                    world={id}
-                    tier="text"
-                    as="span"
-                    blocking={false}
-                    className="text-base leading-none text-[color:var(--ink-800)]"
-                  >
-                    {world.nativeName}
-                  </ScriptText>
-                  <span className="text-sm text-[color:var(--ink-700)]">
-                    {world.latinName}
-                  </span>
-                </li>
-              )
-            })}
+        {/* Offset right of the type block. One shared canvas covers every slot
+            inside this element and nothing outside it. */}
+        <WorldField className="w-full">
+          <ul className="flex flex-col gap-8 md:items-end lg:gap-10">
+            {open.map((id) => (
+              <WorldChoice key={id} world={id} />
+            ))}
           </ul>
-        ) : null}
+
+          {closed.length > 0 ? (
+            <ul className="mt-16 flex flex-col gap-1 border-t border-[color:var(--ink-400)] pt-7 md:mt-24">
+              {closed.map((id) => (
+                <QuietWorld key={id} world={id} />
+              ))}
+            </ul>
+          ) : null}
+        </WorldField>
       </div>
     </main>
   )
