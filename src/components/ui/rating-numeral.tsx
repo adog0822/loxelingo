@@ -143,7 +143,7 @@ export function RatingNumeral({
       </span>
 
       {band === undefined ? null : (
-        <span className="t-label" style={{ color: "var(--accent-text)" }}>
+        <span className="t-eyebrow" style={{ color: "var(--accent-text)" }}>
           {band.name}
         </span>
       )}

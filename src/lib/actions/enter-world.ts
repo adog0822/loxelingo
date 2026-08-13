@@ -27,6 +27,13 @@ export async function enterWorld(formData: FormData): Promise<void> {
     // Surface the reason rather than failing blank. `rate_limited` is the one
     // that will actually happen: guest creation is IP-limited to 30/hour, so a
     // school or office behind one NAT hits it in normal use.
+    //
+    // This function moves CODES, never sentences. Every code here is a key in
+    // the ERRORS map in src/app/page.tsx, which is the one place a reader-
+    // facing string for a failed entry is allowed to exist, and the rules
+    // those strings follow are in docs/design/copy.md. Writing a message here
+    // would put half the voice in a server action and half in a page, and the
+    // half in the server action is the half nobody reviews.
     redirect(`/?error=${session.code}`)
   }
 

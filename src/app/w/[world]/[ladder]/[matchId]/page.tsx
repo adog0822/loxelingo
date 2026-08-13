@@ -89,7 +89,7 @@ export default async function MatchPromptPage(
             elements in the entire product, and it earns its place by carrying a
             rule the user must obey to score. */}
         {prompt.constraint === null ? null : (
-          <p className="t-label" style={{ color: "var(--text-tertiary)" }}>
+          <p className="t-eyebrow" style={{ color: "var(--text-tertiary)" }}>
             <MixedText world={prompt.world} text={prompt.constraint} />
           </p>
         )}

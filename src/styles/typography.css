@@ -1,6 +1,7 @@
 /* ============================================================
    Typography
    docs/design/design-system.md §3
+   docs/design/discovery-taste.md §1.5, §2.8, §3.1
 
    Script rendering rules here are load-bearing, not cosmetic.
    `lang` is mandatory on every element containing CJK: `lang="ja"`
@@ -9,6 +10,73 @@
    in src/components/ui/script-text.tsx; these rules are what it
    hangs on.
    ============================================================ */
+
+/* ------------------------------------------------------------
+   Typographic tokens.
+
+   The size ramp, the family stacks and the three base width
+   postures live in tokens.css. What is added here is everything
+   a *role* needs in order to be applied whole: the two extra
+   width stops, the measure ramp, and the measured CJK optical
+   factors. They sit next to the roles that consume them because
+   a role and its measure are one decision, not two.
+   ------------------------------------------------------------ */
+:root {
+  /* Two more stops on the width axis, past the three in tokens.css
+     (--wdth-display 112 / --wdth-text 100 / --wdth-instrument 92).
+
+     --wdth-numeral sits between display and text: a rating needs
+     more presence than prose and less than a world name, and the
+     tabular set is identical to the tenth of a pixel at every
+     width, so widening a numeral costs no alignment.
+
+     --wdth-rank is the narrow tabular posture that replaces mono
+     in a rank column. A rank does not need a terminal voice; it
+     needs to be narrow, tabular and out of the way. */
+  --wdth-numeral: 106;
+  /* The rationed eyebrow, one step narrower than the instrument
+     posture. Condensed letterforms with wide-open tracking is what
+     makes a stated condition read as stamped rather than written. */
+  --wdth-eyebrow: 88;
+  --wdth-rank: 78;
+
+  /* Measure scales INVERSELY with size. 65ch is a body figure and
+     applying it to 40px type produces a 1600px line. */
+  --measure-body: 66ch; /* 16px */
+  --measure-body-lg: 58ch; /* 18px */
+  --measure-title: 42ch; /* 20-24px */
+  --measure-display-3: 34ch; /* 30-40px. The verdict sentence. */
+  --measure-display-2: 26ch; /* 40-60px */
+  --measure-display-1: 22ch; /* 52-96px. At this size a line is a shape. */
+
+  /* --- CJK optical correction. Measured in this app, in this
+     browser, against the faces it actually loads. Method:
+     canvas measureText, actualBoundingBoxAscent + Descent, at
+     200px, divided by 200.
+
+       Archivo cap height (H), every weight 400-700 ... 0.686 em
+       Zen Kaku Gothic New  日  @600/700 ............. 0.886 em
+       Noto Sans SC         日  @500 ................. 0.853 em
+       Pretendard Variable  한  @500 ................. 0.857 em
+
+     Latin cap height over CJK visual height gives the factor. A
+     CJK glyph set at the same font-size as adjacent Latin renders
+     about 29% taller, which is the single largest optical error
+     in the product because world select sets 日本 and English at
+     one token size on one screen.
+
+     --cjk-optical-ko was flagged UNMEASURED in discovery-taste.md
+     §8. It is measured now: 0.686 / 0.857 = 0.800, which confirms
+     the estimate rather than replacing it. */
+  --cjk-optical-ja: 0.775; /* 0.686 / 0.886 */
+  --cjk-optical-zh: 0.805; /* 0.686 / 0.853 */
+  --cjk-optical-ko: 0.8; /* 0.686 / 0.857, measured 2026-08-13 */
+
+  /* Consumed by the display and title roles as a multiplier. It is
+     1 everywhere except on a CJK display run, so a role can carry
+     the correction without any caller knowing it exists. */
+  --cjk-scale: 1;
+}
 
 @layer base {
   /* Every numeral in the product carries tabular + lining figures.
@@ -64,6 +132,34 @@
     line-height: 1.15;
   }
 
+  /* ----------------------------------------------------------
+     The CJK optical correction, applied automatically.
+
+     Scoped to `:lang()` so no call site can forget it, and
+     compounded with `[data-script-tier]` so it cannot apply
+     twice. `:lang(ja)` alone matches every DESCENDANT of a
+     Japanese element as well, so a rule keyed on `:lang()` by
+     itself would shrink a nested run a second time. Only
+     <ScriptText> writes data-script-tier, and it writes it on
+     one element, which makes the pair exact.
+
+     Display tier only, deliberately. The factor matches Latin
+     CAP HEIGHT, which is the right target when 日本 sits beside
+     English on one line at one size. Applying it to body text
+     would push 16px CJK to 12.4px, under the 13px floor, on the
+     script that can least afford it: a corrected CJK body is a
+     legibility bug, not an optical fix. CJK body keeps its size
+     and gets its 1.8 line-height instead. */
+  :lang(ja)[data-script-tier="display"] {
+    --cjk-scale: var(--cjk-optical-ja);
+  }
+  :lang(zh)[data-script-tier="display"] {
+    --cjk-scale: var(--cjk-optical-zh);
+  }
+  :lang(ko)[data-script-tier="display"] {
+    --cjk-scale: var(--cjk-optical-ko);
+  }
+
   ruby {
     ruby-position: over;
   }
@@ -80,14 +176,40 @@
 
 /* ------------------------------------------------------------
    Type roles. One class per row of the §3.4 scale, carrying size,
-   line-height, tracking and weight together so a caller cannot
-   apply half of a role. Utilities still win (these sit in the
-   components layer).
+   line-height, tracking, weight, WIDTH and MEASURE together so a
+   caller cannot apply half of a role. Utilities still win (these
+   sit in the components layer).
+
+   THE WIDTH AXIS IS THE TWO-ZONE DIAL.
+   Archivo runs wdth 62-125 in one file. The design system's most
+   structural decision is that the world is vast and atmospheric
+   while the instrument is precise and still, and until now that
+   split had no typographic expression at all: both zones ran the
+   same family at the same width at the same weight, which is what
+   made every screen read flat and unauthored.
+
+     world / atmosphere   --wdth-display     112   display roles
+     neutral / prose      --wdth-text        100   body roles
+     instrument / dense   --wdth-instrument   92   labels, meta
+     rating               --wdth-numeral     106   ratings
+     rank column          --wdth-rank         78   narrow tabular
+
+   Applying `font-variation-settings: "wdth"` alone leaves `wght`
+   under the control of `font-weight`, which is why weight is
+   still declared normally on every role.
+
+   The jump from display to body is now three simultaneous moves:
+   96px to 16px, weight 600 to 400, and width 112 to 100. One of
+   those is a size ramp; three of them are a voice.
    ------------------------------------------------------------ */
 @layer components {
+  /* The FORGE hero character. CJK only, alone on the screen, with
+     no adjacent Latin to match, so it takes no optical correction:
+     there is nothing to correct it against. */
   .t-glyph {
     font-family: var(--font-display);
     font-size: var(--t-glyph);
+    font-variation-settings: "wdth" var(--wdth-display);
     line-height: 1;
     letter-spacing: 0;
     font-weight: 500;
@@ -95,82 +217,199 @@
 
   .t-display-1 {
     font-family: var(--font-display);
-    font-size: var(--t-display-1);
+    font-size: calc(var(--t-display-1) * var(--cjk-scale));
+    font-variation-settings: "wdth" var(--wdth-display);
     line-height: 1.02;
     letter-spacing: -0.035em;
     font-weight: 600;
+    max-width: var(--measure-display-1);
+    text-wrap: balance;
   }
 
   .t-display-2 {
     font-family: var(--font-display);
-    font-size: var(--t-display-2);
+    font-size: calc(var(--t-display-2) * var(--cjk-scale));
+    font-variation-settings: "wdth" var(--wdth-display);
     line-height: 1.06;
     letter-spacing: -0.03em;
     font-weight: 600;
+    max-width: var(--measure-display-2);
+    text-wrap: balance;
   }
 
   .t-display-3 {
     font-family: var(--font-display);
-    font-size: var(--t-display-3);
+    font-size: calc(var(--t-display-3) * var(--cjk-scale));
+    font-variation-settings: "wdth" var(--wdth-display);
     line-height: 1.12;
     letter-spacing: -0.025em;
     font-weight: 500;
+    max-width: var(--measure-display-3);
+    text-wrap: balance;
   }
 
   .t-title-1 {
-    font-size: var(--t-title-1);
+    font-size: calc(var(--t-title-1) * var(--cjk-scale));
+    font-variation-settings: "wdth" var(--wdth-text);
     line-height: 1.25;
     letter-spacing: -0.015em;
     font-weight: var(--weight-header, 500);
+    max-width: var(--measure-title);
+    text-wrap: balance;
   }
 
   .t-title-2 {
-    font-size: var(--t-title-2);
+    font-size: calc(var(--t-title-2) * var(--cjk-scale));
+    font-variation-settings: "wdth" var(--wdth-text);
     line-height: 1.3;
     letter-spacing: -0.01em;
     font-weight: var(--weight-header, 500);
+    text-wrap: balance;
   }
 
   .t-title-3 {
-    font-size: var(--t-title-3);
+    font-size: calc(var(--t-title-3) * var(--cjk-scale));
+    font-variation-settings: "wdth" var(--wdth-text);
     line-height: 1.4;
     letter-spacing: 0;
     font-weight: var(--weight-header, 500);
   }
 
+  /* Prose runs at the neutral posture and takes its measure from
+     the size, never from the container. */
   .t-body-lg {
     font-size: var(--t-body-lg);
+    font-variation-settings: "wdth" var(--wdth-text);
     line-height: 1.6;
     font-weight: 400;
+    max-width: var(--measure-body-lg);
+    text-wrap: pretty;
   }
 
   .t-body {
     font-size: var(--t-body);
+    font-variation-settings: "wdth" var(--wdth-text);
     line-height: 1.55;
     font-weight: 400;
+    max-width: var(--measure-body);
+    text-wrap: pretty;
   }
 
   .t-body-sm {
     font-size: var(--t-body-sm);
+    font-variation-settings: "wdth" var(--wdth-text);
     line-height: 1.5;
     font-weight: 400;
+    max-width: 74ch; /* small text tolerates more characters per line */
+    text-wrap: pretty;
   }
 
-  /* One of exactly two permitted eyebrow-shaped elements:
-     the match constraint line, and the band label under a rating. */
+  /* ----------------------------------------------------------
+     THE EYEBROW RATION. Read this before adding a third one.
+
+     A tiny tracked uppercase line above a heading is the most
+     saturated shape in generated interfaces, and the design
+     system's answer is a hard count rather than a taste rule:
+     EXACTLY TWO elements in the whole product may take the
+     eyebrow shape, and both are named.
+
+       1. The match constraint line. A rule the reader must obey
+          to score: `UNDER 40 CHARACTERS`, `PLAIN FORM`.
+       2. The band label under a rating.
+
+     Those two get `.t-eyebrow`, below. Everything else that is
+     merely small and capitalised gets `.t-label`, which is an
+     ordinary label and is not rationed.
+
+     The two are deliberately not interchangeable, and the
+     difference is legible at 13px: an eyebrow is condensed and
+     tracked wide open, so it reads as a condition stamped onto
+     the screen; a label is a shade wider and tracked tighter, so
+     it reads as the name of the thing beneath it. If a new
+     string cannot be described as a rule the reader must follow,
+     it is a label.
+
+     KNOWN CALL-SITE DRIFT, in files this change does not own.
+     `.t-eyebrow` was referenced before it was ever defined, so
+     all three current call sites are on the wrong class. Each fix
+     is one word, and each belongs to whoever owns that file:
+
+       src/app/w/[world]/[ladder]/[matchId]/page.tsx:92
+         the constraint line. Uses `t-label`, wants `t-eyebrow`.
+         This is rationed element 1.
+       src/components/ui/rating-numeral.tsx:146
+         the band label. Uses `t-label`, wants `t-eyebrow`.
+         This is rationed element 2.
+       src/app/w/[world]/[ladder]/page.tsx:85
+         `Japanese · DUEL`. Uses `t-eyebrow`, wants `t-label`.
+         It names a place and states no condition, so it is not
+         one of the two and must not look like them.
+
+     Until those land, the ration is enforced by this comment
+     rather than by the stylesheet, which is the weaker of the two
+     and is why the note is this long. Defining `.t-eyebrow` here
+     does fix the visible half of the bug immediately: the third
+     call site was rendering as unstyled 16px body text.
+     ---------------------------------------------------------- */
+  .t-eyebrow {
+    font-size: var(--t-label);
+    font-variation-settings: "wdth" var(--wdth-eyebrow);
+    line-height: 1.3;
+    letter-spacing: 0.09em;
+    font-weight: 600;
+    text-transform: uppercase;
+    /* Tracking adds its gap AFTER the last letter too. Give it back
+       so the line sits on the same optical edge as the type below. */
+    margin-inline-end: -0.09em;
+  }
+
+  @supports (text-box: trim-both cap alphabetic) {
+    .t-eyebrow {
+      text-box: trim-both cap alphabetic;
+    }
+  }
+
+  /* The ordinary small capitalised label. Not rationed, and not an
+     eyebrow: it names things (a world's Latin name, a verdict
+     panel's owner) rather than stating conditions.
+
+     This is the instrument voice at its narrowest reasonable
+     point: 13px, condensed, tracked open, so it reads as an
+     engraved plate rather than as small body copy.
+
+     Two optical corrections, both from discovery-taste.md §2.8.
+     Caps have no descender, so a mathematically centred tracked
+     label sits visually low; `text-box` trims to the cap and
+     alphabetic edges where supported. And letter-spacing adds a
+     trailing gap AFTER the last letter, which insets the label
+     from a right-aligned edge by its own tracking; the negative
+     end margin gives that space back. World select right-aligns
+     these against the world names, so it is visible there. */
   .t-label {
     font-size: var(--t-label);
+    font-variation-settings: "wdth" var(--wdth-instrument);
     line-height: 1.3;
     letter-spacing: 0.06em;
-    font-weight: 500;
+    font-weight: 600;
     text-transform: uppercase;
+    margin-inline-end: -0.06em;
+  }
+
+  @supports (text-box: trim-both cap alphabetic) {
+    .t-label {
+      text-box: trim-both cap alphabetic;
+    }
   }
 
   /* Ratings and ranks use the display face, never mono. Mono ratings
-     read as terminal output; display ratings read as a score. */
+     read as terminal output; display ratings read as a score.
+     Archivo's tabular set is identical to the tenth of a pixel at
+     every width, verified in this app at wdth 78 / 100 / 112, so a
+     rating can take a wider posture without ever shifting. */
   .t-num-hero {
     font-family: var(--font-display);
     font-size: var(--t-num-hero);
+    font-variation-settings: "wdth" var(--wdth-numeral);
     line-height: 1;
     letter-spacing: -0.02em;
     font-weight: 600;
@@ -179,13 +418,27 @@
   .t-num {
     font-family: var(--font-display);
     font-size: var(--t-num);
+    font-variation-settings: "wdth" var(--wdth-numeral);
     line-height: 1.2;
     letter-spacing: 0;
     font-weight: 500;
   }
 
-  /* Mono is reserved for timers, match IDs, replay counters, and the
-     ladder's rank column. That is the whole list. */
+  /* The narrow tabular posture. Same family, same figures, no
+     terminal voice: a rank column in mono is a texture change
+     that carries no meaning. */
+  .t-rank {
+    font-family: var(--font-display);
+    font-size: var(--t-mono);
+    font-variation-settings: "wdth" var(--wdth-rank);
+    line-height: 1.4;
+    letter-spacing: 0;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* Mono is reserved for timers, match IDs and replay counters.
+     That is the whole list; the rank column moved to .t-rank. */
   .t-mono {
     font-family: var(--font-mono);
     font-size: var(--t-mono);

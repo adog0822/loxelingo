@@ -82,7 +82,7 @@ function BeginMatch({ world, ladder }: { world: WorldId; ladder: LadderId }) {
         className="relative mx-auto flex min-h-dvh w-full max-w-[62ch] flex-col justify-center gap-6 px-6 py-24"
         style={{ zIndex: "var(--z-content)" } as CSSProperties}
       >
-        <p className="t-eyebrow" style={{ color: "var(--text-tertiary)" }}>
+        <p className="t-label" style={{ color: "var(--text-tertiary)" }}>
           {definition.latinName} · {LADDER_NAMES[ladder]}
         </p>
         <h1 className="t-display-3" style={{ color: "var(--text-primary)" }}>

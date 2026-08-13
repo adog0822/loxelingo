@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 import { SkyLayer } from '@/components/ui/sky-layer'
 import { QuietWorld, WorldChoice } from '@/components/world/world-choice'
 import { WorldField } from '@/components/world/world-field'
@@ -5,15 +7,28 @@ import { WORLD_IDS, langForWorld, type WorldId } from '@/lib/design/worlds'
 import { getSessionState } from '@/lib/auth/session'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 
+/**
+ * Every string a reader can be shown after a failed entry.
+ * docs/design/copy.md
+ *
+ * The rules those rewrites follow, because this map is where they are
+ * easiest to break: state what happened, then the one thing the reader
+ * can do about it. Present tense. No apology, no "Oops", no "Something
+ * went wrong", no em-dash, and no sentence that opens on a negation.
+ * "Nobody to face there yet" told a reader what the product lacked
+ * before it told them anything they could act on.
+ */
 const ERRORS: Record<string, string> = {
-  rate_limited: 'Too many new sessions from this network right now. Try again shortly.',
-  guests_disabled: 'Guest play is unavailable right now.',
-  linking_disabled: 'Account linking is unavailable right now.',
-  unknown_world: 'That world does not exist.',
-  world_not_launched: 'That one is not open yet.',
-  no_items: 'That ladder has nothing to set as a task yet.',
-  no_opponent: 'Nobody to face there yet.',
-  unknown: 'Something went wrong starting your session.',
+  rate_limited:
+    'This network has used up its new sessions for the hour. Wait a few minutes, then pick a world again.',
+  guests_disabled: 'Guest play is paused right now. Sign in to enter a world.',
+  linking_disabled:
+    'Account linking is paused right now. Your rating is saved and stays with this browser.',
+  unknown_world: 'That link does not name a world. Pick one from the list below.',
+  world_not_launched: 'That world is closed for now. The open ones are listed below.',
+  no_items: 'That ladder is still waiting on its first prompts. Pick another ladder in this world.',
+  no_opponent: 'That ladder is waiting on a second player. Pick another ladder in this world.',
+  unknown: 'The session stopped short of starting. Pick a world to try again.',
 }
 
 /**
@@ -43,7 +58,8 @@ async function launchedWorlds(): Promise<ReadonlySet<WorldId>> {
  *
  * The composition is asymmetric on purpose: the type block holds the left,
  * the bodies run down and to the right of it, and the closed worlds sit small
- * and quiet under a hairline. No tiles, no grid, no icons, no badges — and
+ * and quiet under a hairline. The composition is carried by type, spacing and
+ * the bodies alone: tiles, a grid, icons and badges are all absent, and
  * nothing in the copy names what is being rendered.
  */
 export default async function Page({
@@ -71,19 +87,48 @@ export default async function Page({
         className="relative mx-auto flex min-h-dvh w-full max-w-[1200px] flex-col justify-center gap-14 px-5 py-20 sm:px-6 md:gap-24 md:px-10 md:py-28 lg:px-16"
         style={{ zIndex: 'var(--z-content)' }}
       >
-        <header className="flex max-w-[30ch] flex-col gap-4">
-          {/* At 375 exactly one element is allowed to be big, and on this
-              screen that is the native script, not this line. */}
-          <h1 className="text-[clamp(1.625rem,3.6vw,3.25rem)] font-medium leading-[1.1] tracking-[-0.025em] text-[color:var(--ink-900)]">
-            Not a student. Ranked.
+        {/* The type block runs the role classes rather than one-off
+            arbitrary values. That is the whole of the "flat page" fix from
+            discovery-taste.md §6.2: the roles carry width, weight, tracking
+            and measure together, so a heading cannot ship at 400 weight with
+            default tracking because someone set only its size.
+
+            At 375 exactly one element is allowed to be big. --t-display-2
+            bottoms out at 40px there, and the native script bottoms out at
+            48px, so the world names stay the largest thing on a phone and
+            take the lead back from this heading. */}
+        <header className="flex flex-col gap-5 md:gap-6">
+          {/* --t-display-1's own floor is 52px, which would put this heading
+              and the native script within 4px of each other on a phone: the
+              "everything is medium" failure. The role still supplies width
+              112, weight 600, -0.035em tracking, the 22ch measure and the
+              balance; only the floor is retuned, down to 40px, so the world
+              names lead at 375 and this leads from about 1024 up. The 96px
+              ceiling is the spec's and is unchanged.
+
+              Retuned by overriding the token rather than the font-size, so
+              that the role keeps computing its own size and nothing in the
+              cascade has to be fought. */}
+          {/* Ceiling pulled from 6rem to 4.25rem after measuring the result at
+              1280x900: the 96px setting pushed BOTH world choices past the fold,
+              so the screen led with a statement and hid the only decision on it.
+              The headline was winning against the task it introduces. 68px still
+              carries the display role and returns both choices to the first
+              screen. */}
+          <h1
+            className="t-display-1 text-[color:var(--ink-900)]"
+            style={{ '--t-display-1': 'clamp(2.25rem, 5.2vw, 4.25rem)' } as CSSProperties}
+          >
+            Your first match sets where you stand.
           </h1>
-          <p className="max-w-[34ch] text-[1rem] leading-[1.55] text-[color:var(--ink-700)]">
-            Pick one. You play your first match now. No account until you have
-            something worth keeping.
+          <p className="t-body-lg text-[color:var(--ink-700)]">
+            Pick a world. The first match starts now. The account comes later,
+            once there is a rating worth keeping.
           </p>
           {session.status === 'guest' ? (
-            <p className="text-[0.875rem] leading-[1.5] text-[color:var(--ink-650)]">
-              Playing as a guest. Your rating is being saved.
+            <p className="t-body-sm max-w-[52ch] text-[color:var(--ink-700)]">
+              Playing as a guest. Your rating is saved and follows you into an
+              account.
             </p>
           ) : null}
         </header>
@@ -91,7 +136,7 @@ export default async function Page({
         {message ? (
           <p
             role="alert"
-            className="border-l border-[color:var(--signal-warn)] pl-4 text-[0.875rem] leading-[1.5] text-[color:var(--ink-700)]"
+            className="t-body-sm max-w-[58ch] border-l border-[color:var(--signal-warn)] pl-4 text-[color:var(--ink-700)]"
           >
             {message}
           </p>
@@ -100,6 +145,14 @@ export default async function Page({
         {/* Offset right of the type block. One shared canvas covers every slot
             inside this element and nothing outside it. */}
         <WorldField className="w-full">
+          {/* Both lists are named for a screen reader and for nobody else.
+              Sighted readers get the distinction from the typography: open
+              worlds carry the display posture and a lit body, closed ones
+              sit at text size and do not answer the cursor. A reader who
+              cannot see that needs the same fact in words, and a visible
+              heading over a list of seven rows would be the label the
+              composition was built to avoid. */}
+          <h2 className="sr-only">Worlds you can enter now</h2>
           <ul className="flex flex-col gap-8 md:items-end lg:gap-10">
             {open.map((id) => (
               <WorldChoice key={id} world={id} />
@@ -107,11 +160,14 @@ export default async function Page({
           </ul>
 
           {closed.length > 0 ? (
-            <ul className="mt-16 flex flex-col gap-1 border-t border-[color:var(--ink-400)] pt-7 md:mt-24">
-              {closed.map((id) => (
-                <QuietWorld key={id} world={id} />
-              ))}
-            </ul>
+            <>
+              <h2 className="sr-only">Worlds opening later</h2>
+              <ul className="mt-16 flex flex-col gap-1 border-t border-[color:var(--ink-400)] pt-7 md:mt-24">
+                {closed.map((id) => (
+                  <QuietWorld key={id} world={id} />
+                ))}
+              </ul>
+            </>
           ) : null}
         </WorldField>
       </div>
