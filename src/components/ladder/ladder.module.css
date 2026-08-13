@@ -1,0 +1,340 @@
+/* ============================================================
+   Ladder select
+   docs/design/discovery-taste.md §5, §3.2, §3.4
+   docs/design/design-system.md §4, §7.4, §8.1
+
+   Three ladders, three identities, no icons and no per-ladder
+   colour. Colour is spoken for: hue encodes place (world) and gold
+   encodes earned. What is left is TYPE, SPACING, LINE and MOTION,
+   plus the width axis Archivo gives for free.
+
+     DUEL    wdth 112 / 600 / -0.02em  no rules, off-axis 7-5 split,
+                                       motion vector X
+     FORGE   wdth 100 / 500 /  0       horizontal 24px module,
+                                       motion vector Y, quantised
+     RECALL  wdth  88 / 400 / +0.01em  one vertical rule, wide left
+                                       margin, no motion vector
+
+   Every entrance animates transform and opacity only, runs once,
+   and uses `both` fill so the reduced-motion override in base.css
+   (`animation-duration: 1ms !important`) lands the element on its
+   final state instead of removing it. Width, weight, tracking,
+   leading, rhythm and line direction all survive with motion off,
+   which is the test that separates a system from a set of
+   transitions.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   Postures. Size is deliberately shared: three peers at three
+   postures, never a hierarchy of three sizes.
+   ------------------------------------------------------------ */
+.name {
+  font-family: var(--font-display);
+  /* One big element per small screen is the native script in the
+     header, so this stays well under it at 375px. */
+  font-size: clamp(1.75rem, 7vw, 3.25rem);
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.duelName {
+  font-variation-settings: "wdth" 112;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+}
+
+.forgeName {
+  font-variation-settings: "wdth" 100;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.06;
+}
+
+.recallName {
+  font-variation-settings: "wdth" 88;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1.12;
+}
+
+/* Measure and leading carry the same three voices into the prose. */
+.duelLead {
+  max-width: 34ch;
+  line-height: 1.45;
+  font-variation-settings: "wdth" 106;
+}
+
+.forgeLead {
+  line-height: 1.35;
+  font-variation-settings: "wdth" 100;
+}
+
+.recallLead {
+  max-width: 62ch;
+  line-height: 1.75;
+  font-variation-settings: "wdth" 94;
+}
+
+/* FORGE is the only surface with a perceptible baseline grid: a
+   visible 24px module the eye can count. Rendered as hairlines at a
+   fixed rhythm, never as a border on every row of a list. */
+.module {
+  display: grid;
+  grid-auto-rows: 24px;
+  align-items: center;
+}
+
+.moduleRow {
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* RECALL's listening axis. One vertical rule, full height, 1px and
+   decorative. A thicker coloured edge here would be the banned
+   side-stripe, so the emphasis comes from --ink-500 rather than from
+   width or from the accent: this rule carries an identity, so it has
+   to be seen, and it groups rather than bounds, so it stays below the
+   3:1 functional-border floor by design. */
+.axis {
+  border-left: 1px solid var(--ink-500);
+}
+
+/* ------------------------------------------------------------
+   Rung surface. No card, no bed, no drop shadow. Hover is a faint
+   wash of this world's OWN deep token, so the affordance reads as
+   light arriving from the place rather than as a selected list row.
+
+   The wash lives on an inner surface rather than on the link, so it
+   hugs each ladder's own composition: full width under DUEL's two
+   opposed masses, the centred column under FORGE, the indented
+   column under RECALL. A full-bleed bar behind centred content is
+   exactly the selected-list-row look this screen exists to avoid.
+   ------------------------------------------------------------ */
+.rung {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.surface {
+  border-radius: var(--r-2);
+  transition: background-color var(--dur-base) var(--ease-out-quint);
+}
+
+.rung:hover .surface,
+.rung:focus-visible .surface {
+  background-color: color-mix(in oklab, var(--world-deep) 30%, transparent);
+}
+
+.rungName {
+  color: var(--text-primary);
+  transition: color var(--dur-fast) var(--ease-out-quint);
+}
+
+.rung:hover .rungName,
+.rung:focus-visible .rungName {
+  color: var(--accent-text);
+}
+
+/* The mark takes the same step. Gold means actionable here, which is
+   exactly what a focused or hovered control is. */
+.mark {
+  color: var(--ink-600);
+  transition: color var(--dur-base) var(--ease-out-quint);
+}
+
+.rung:hover .mark,
+.rung:focus-visible .mark {
+  color: var(--accent-text);
+}
+
+/* ------------------------------------------------------------
+   Entrances
+   ------------------------------------------------------------ */
+@keyframes fromX {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--from-x, -20px), 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* One 24px step for everything in FORGE. Machine-like: no overshoot,
+   which is why this uses --ease-standard rather than the expo. */
+@keyframes fromStep {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* DUEL: the only entrances in the product that come from the side.
+   Two opposed masses, each pushed in from its own outer edge. */
+.enterX {
+  animation: fromX var(--dur-base) var(--ease-out-expo) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+/* FORGE: quantised Y, staggered 40ms, capped at 8 items. */
+.enterStep {
+  animation: fromStep var(--dur-base) var(--ease-standard) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+/* RECALL: opacity only, and slow. Nothing here arrives quickly. */
+.enterSlow {
+  animation: arrive var(--dur-ignite) var(--ease-standard) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+/* ------------------------------------------------------------
+   Mark interiors. Each mark moves on its ladder's own vector, so
+   the identity is legible from the motion before the name is read.
+   ------------------------------------------------------------ */
+
+/* DUEL: two strokes advance from opposite sides and cross off
+   centre. On hover the crossing tightens: X again. */
+.duelBlade {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform var(--dur-base) var(--ease-out-expo);
+}
+
+.rung:hover .duelBladeA,
+.rung:focus-visible .duelBladeA {
+  transform: translateX(3px);
+}
+
+.rung:hover .duelBladeB,
+.rung:focus-visible .duelBladeB {
+  transform: translateX(-3px);
+}
+
+/* FORGE: the rungs re-seat on the module. Same step for all of
+   them, staggered, no overshoot. */
+.forgeRule {
+  transform-box: fill-box;
+  transition: transform var(--dur-base) var(--ease-standard);
+  transition-delay: var(--delay, 0ms);
+}
+
+.rung:hover .forgeRule,
+.rung:focus-visible .forgeRule {
+  transform: translateY(-2px);
+}
+
+/* RECALL: opacity only, over --dur-ignite. The arcs do not move. */
+.recallArc {
+  opacity: 0.55;
+  transition: opacity var(--dur-ignite) var(--ease-standard);
+  transition-delay: var(--delay, 0ms);
+}
+
+.rung:hover .recallArc,
+.rung:focus-visible .recallArc {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------
+   The roster
+   ------------------------------------------------------------ */
+
+/* A full-bleed stratum, not a card: it has no left or right
+   boundary, so it reads as a layer of the world rather than as a
+   panel pasted onto it. Depth is a surface lightness step plus the
+   paired edge (light on top, dark on the bottom), which is the only
+   shadow substitute that works on dark. */
+.stratum {
+  background: color-mix(in oklab, var(--surface-1) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.07),
+    inset 0 -1px 0 rgb(0 0 0 / 0.28);
+}
+
+.botRow {
+  animation: fromStep var(--dur-base) var(--ease-out-expo) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+.botMark {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform var(--dur-slow) var(--ease-out-expo);
+}
+
+.botRow:hover .botMark {
+  transform: rotate(9deg);
+}
+
+.botName {
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 100;
+  font-weight: 500;
+}
+
+/* Ratings are read in columns, so they get the narrow instrument
+   posture rather than the wide world one. */
+.botRating {
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 96;
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------
+   Increased contrast: the decorative hairlines that carry FORGE's
+   module and RECALL's axis step up with everything else, and the
+   roster stratum drops its transparency so the step is unambiguous.
+   ------------------------------------------------------------ */
+@media (prefers-contrast: more) {
+  .stratum {
+    background: var(--surface-1);
+  }
+  .recallArc {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------
+   Reduced motion.
+
+   The base layer already collapses every duration to 1ms, which
+   lands each entrance on its final state instead of removing it.
+   Delays are NOT durations, though, and they survive that override:
+   RECALL's standing waits 600ms and the roster's last row waits
+   320ms, so without this the content would still be absent for
+   half a second and then appear. A held-back element is a missing
+   element, whatever the reason. Zero the delays too, and the whole
+   composition is simply there, still, on first paint.
+   ------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .enterX,
+  .enterStep,
+  .enterSlow,
+  .botRow {
+    animation-delay: 0ms !important;
+  }
+
+  .forgeRule,
+  .recallArc {
+    transition-delay: 0ms !important;
+  }
+}
