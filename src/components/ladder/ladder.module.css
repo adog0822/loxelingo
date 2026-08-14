@@ -100,33 +100,215 @@
    3:1 functional-border floor by design. */
 .axis {
   border-left: 1px solid var(--ink-500);
+  transition: border-color var(--dur-ignite) var(--ease-standard);
+}
+
+.rung:hover .axis,
+.rung:focus-visible .axis {
+  border-color: var(--ink-600);
 }
 
 /* ------------------------------------------------------------
-   Rung surface. No card, no bed, no drop shadow. Hover is a faint
-   wash of this world's OWN deep token, so the affordance reads as
-   light arriving from the place rather than as a selected list row.
+   THE THRESHOLD: what makes a rung look pressable at rest.
 
-   The wash lives on an inner surface rather than on the link, so it
-   hugs each ladder's own composition: full width under DUEL's two
-   opposed masses, the centred column under FORGE, the indented
-   column under RECALL. A full-bleed bar behind centred content is
-   exactly the selected-list-row look this screen exists to avoid.
+   A full-width link with `cursor: pointer` is an affordance a mouse
+   can find and a finger cannot. On touch there is no hover, so a
+   player saw three headings and had to guess. Everything below is
+   visible with zero interaction.
+
+   Three channels, none of which is a card, a shadow or an icon:
+
+     1. A WASH that pools along each ladder's own dominant line and
+        fades to nothing before it reaches the far edge. It has no
+        top edge, no border and no nesting, so it reads as light
+        collecting at a threshold rather than as a panel pasted on
+        the sky. Light in this product comes from somewhere; this
+        light comes from the way in.
+     2. A SILL: one decorative hairline along that same line, with a
+        lit segment at the point the rung is entered from. Gold is
+        the earned-or-actionable accent, and a control that is always
+        actionable should carry it at rest, not only once a cursor
+        has found it.
+     3. The MARK, off --ink-600. That token is the disabled-label
+        step. Drawing a live control in the disabled colour is the
+        cheapest possible way to look untappable.
+
+   The three treads are three different shapes, because each ladder's
+   own composition cuts them: DUEL runs the full width, FORGE is a
+   centred column, RECALL an indented one. One material, three
+   shapes, so the three identities survive.
    ------------------------------------------------------------ */
 .rung {
   display: block;
   color: inherit;
   text-decoration: none;
+  /* One surface step, carried toward this world's own deep hue.
+     Measured near 0.03 OKLCH L over the canvas, which is the floor
+     at which a step is still visible on a phone in daylight. */
+  --rung-bed: color-mix(in oklab, var(--surface-1) 72%, var(--world-deep));
+  /* Fraction of the sill that is lit at rest. Overridden per ladder
+     and at small widths, where a proportion of a narrow box would
+     otherwise read as a speck. */
+  --lit: 0.075;
+  --wash: 0.86;
 }
 
 .surface {
+  position: relative;
   border-radius: var(--r-2);
-  transition: background-color var(--dur-base) var(--ease-out-quint);
+  transition:
+    background-image var(--dur-base) var(--ease-out-quint),
+    transform var(--dur-micro) var(--ease-out-quint);
+}
+
+/* The sill and its lit end are pseudo-elements on the surface, so they
+   follow whichever composition that surface has. */
+.sillX::before,
+.sillX::after,
+.recallSurface::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Horizontal sill: DUEL and FORGE.
+
+   A PAIRED rule rather than one hairline, and this is the part that has
+   to be right. The sky behind a rung is not one colour: haze is dense
+   and pale low in the frame and thin and dark high in it, so a single
+   light hairline vanishes over the haze and a single dark one vanishes
+   over the void. Light over dark survives both, and it reads as the
+   front edge of something you can stand on rather than as a line drawn
+   on a flat page. This is the shadow substitute from the taste review,
+   used as an edge instead of as an enclosure. */
+.sillX::before {
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.12) 0 1px,
+    rgb(0 0 0 / 0.32) 1px 2px
+  );
+}
+
+.sillX::after {
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  transform-origin: var(--lit-origin) center;
+  transform: scaleX(var(--lit));
+  transition: transform var(--dur-base) var(--ease-out-expo);
+}
+
+.rung:hover .sillX::after,
+.rung:focus-visible .sillX::after {
+  --lit: 1;
+}
+
+/* DUEL: the wash pools upward from the sill and the sill lights from
+   the left edge, which is where DUEL's own entrance comes from. The
+   hover extension therefore travels on X, the vector DUEL owns. */
+.duelSurface {
+  --lit-origin: left;
+  background-image: radial-gradient(
+    94% 108% at 1% 114%,
+    color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 100%), transparent) 0%,
+    color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 40%), transparent) 46%,
+    transparent 80%
+  );
+}
+
+/* FORGE: strictly centred on one axis, so the lit segment sits at the
+   centre of its own column and opens outward in both directions. */
+.forgeSurface {
+  --lit-origin: center;
+  --lit: 0.19;
+  background-image: radial-gradient(
+    62% 104% at 50% 104%,
+    color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 100%), transparent) 0%,
+    color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 46%), transparent) 46%,
+    transparent 88%
+  );
+}
+
+/* RECALL: no horizontal rules anywhere, so its sill IS the listening
+   axis. The wash pools inward from that axis instead of up from a
+   baseline, and the entry mark is a solid segment on the top of the
+   rule. RECALL has no motion vector, so the mark does not extend on
+   hover: it arrives by opacity, over --dur-ignite. */
+.recallSurface {
+  background-image: radial-gradient(
+    60% 124% at -3% 46%,
+    color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 100%), transparent) 0%,
+    color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 36%), transparent) 44%,
+    transparent 86%
+  );
+}
+
+.recallSurface::after {
+  left: -1px;
+  top: 0;
+  width: 2px;
+  height: 22%;
+  background: var(--accent);
+  opacity: 0.72;
+  transition: opacity var(--dur-ignite) var(--ease-standard);
+}
+
+.rung:hover .recallSurface::after,
+.rung:focus-visible .recallSurface::after {
+  opacity: 1;
 }
 
 .rung:hover .surface,
 .rung:focus-visible .surface {
-  background-color: color-mix(in oklab, var(--world-deep) 30%, transparent);
+  --wash: 1;
+}
+
+/* Press is the one transform a rung makes. On touch it is the only
+   feedback there is, because the pointer never hovers first. */
+.rung:active .surface {
+  transform: scale(0.994);
+}
+
+/* A proportion of a narrow box is a speck. Below the tablet
+   breakpoint the resting segment takes a larger share so it stays
+   legible at 375.
+
+   The veil also has to reach further. On a wide frame the celestial
+   body sits out to one side of a rung and the pool at the threshold
+   is enough. At 375 the body is centred in the same column the text
+   is in, and --text-tertiary over a lit body is around 1.9:1. So on
+   small screens the wash covers the rung rather than one corner of
+   it, which at this width reads as a band of the world rather than
+   as a panel, because the rung already runs past the gutter. */
+@media (max-width: 767px) {
+  .rung {
+    --lit: 0.16;
+    --wash: 1;
+  }
+  .forgeSurface {
+    --lit: 0.3;
+  }
+  .duelSurface,
+  .forgeSurface {
+    background-image: radial-gradient(
+      132% 112% at 34% 100%,
+      color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 100%), transparent) 0%,
+      color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 72%), transparent) 52%,
+      transparent 96%
+    );
+  }
+  .recallSurface {
+    background-image: radial-gradient(
+      118% 128% at 0% 44%,
+      color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 100%), transparent) 0%,
+      color-mix(in oklab, var(--rung-bed) calc(var(--wash) * 66%), transparent) 50%,
+      transparent 94%
+    );
+  }
 }
 
 .rungName {
@@ -139,10 +321,12 @@
   color: var(--accent-text);
 }
 
-/* The mark takes the same step. Gold means actionable here, which is
-   exactly what a focused or hovered control is. */
+/* The mark takes the same step. --ink-600 is the disabled-label step,
+   so a live control drawn in it looks switched off before anyone has
+   touched it. At rest the mark sits at --ink-800, the icon default,
+   and gold arrives on hover and focus. */
 .mark {
-  color: var(--ink-600);
+  color: var(--ink-800);
   transition: color var(--dur-base) var(--ease-out-quint);
 }
 

@@ -130,10 +130,14 @@ function Rung({
   return (
     <Link
       href={`/w/${world}/${ladder}`}
-      // The name is the control. A gold pill on each of three rows would be
-      // three primary actions on one screen; instead the whole block is the
-      // target and the accent arrives on hover and focus, which is exactly when
-      // the thing is actionable.
+      // Descending. The type is what the destination's <RouteTransition> reads
+      // to pick a direction; browser back carries no type and falls through to
+      // a clean cut, which is why the return trip is a real Link too.
+      transitionTypes={["nav-forward"]}
+      // The name is not the control: the whole block is. A gold pill on each of
+      // three rows would be three primary actions on one screen. What says
+      // "pressable" at rest is the threshold in ladder.module.css, and gold
+      // deepens on hover and focus.
       aria-label={`${ladderName}, ${worldName}`}
       className={cx(
         styles.rung,
@@ -224,43 +228,61 @@ function DuelRung({
 }) {
   return (
     <Rung world={world} ladder="duel" ladderName={DUEL.name} worldName={worldName}>
-      {/* Full width, because DUEL's structure IS the two outer edges. */}
+      {/* Full width, because DUEL's structure IS the two outer edges.
+          PROXIMITY. The mark used to sit in the right-hand mass, which put it
+          about 900px from its own heading at 1280 and read as an unrelated
+          object rather than as part of the name. It now sits directly under the
+          wordmark, sharing its left edge, 8px away. The off-axis split is
+          untouched: the left mass is name plus mark, the right mass is the
+          brief and the standing, and the two still enter from opposite sides on
+          X. This also removes the state where an unrated DUEL had nothing at all
+          in its right-hand column. */}
       <div
         className={cx(
           styles.surface,
-          "-mx-3 grid gap-6 px-3 py-6 md:-mx-4 md:grid-cols-12 md:items-center md:gap-8 md:px-4",
+          styles.sillX,
+          styles.duelSurface,
+          "-mx-3 grid gap-6 px-3 py-6 md:-mx-4 md:grid-cols-12 md:items-end md:gap-8 md:px-4",
         )}
       >
         <div
-          className={cx(styles.enterX, "md:col-span-7")}
+          className={cx(styles.enterX, "md:col-span-5")}
           style={{ "--from-x": "-24px", "--delay": "40ms" } as CSSProperties}
         >
           <h2 className={cx(styles.name, styles.duelName, styles.rungName)}>
             {DUEL.name}
           </h2>
-          <p
-            className={cx(styles.duelLead, "mt-3 text-[1.0625rem]")}
-            style={{ color: "var(--ink-800)" }}
-          >
-            {DUEL.lead}
-          </p>
-          <p
-            className={cx(styles.duelLead, "mt-2 text-[0.875rem]")}
-            style={{ color: "var(--text-tertiary)" }}
-          >
-            {DUEL.note}
-          </p>
+          <DuelMark className="mt-2 h-12 w-24 md:h-14 md:w-28" delay={160} />
         </div>
 
+        {/* The right-hand mass starts at a hard interior seam rather than
+            being pushed against the outer gutter: right-aligned prose is
+            affected and slower to read, and the seam is the stronger half of
+            "two opposed masses" anyway. The standing keeps the outer edge. */}
         <div
           className={cx(
             styles.enterX,
-            "flex items-center justify-between gap-6 md:col-span-4 md:col-start-9 md:flex-col md:items-end md:justify-start",
+            "flex flex-col gap-4 md:col-span-6 md:col-start-7",
           )}
           style={{ "--from-x": "24px", "--delay": "40ms" } as CSSProperties}
         >
-          <DuelMark className="h-12 w-24 shrink-0 md:h-14 md:w-28" delay={160} />
-          <Standing standing={standing} ladderName={DUEL.name} align="end" />
+          <div>
+            <p
+              className={cx(styles.duelLead, "text-[1.0625rem]")}
+              style={{ color: "var(--ink-800)" }}
+            >
+              {DUEL.lead}
+            </p>
+            <p
+              className={cx(styles.duelLead, "mt-2 text-[0.875rem]")}
+              style={{ color: "var(--text-tertiary)" }}
+            >
+              {DUEL.note}
+            </p>
+          </div>
+          <div className="md:self-end">
+            <Standing standing={standing} ladderName={DUEL.name} align="end" />
+          </div>
         </div>
       </div>
     </Rung>
@@ -288,6 +310,8 @@ function ForgeRung({
       <div
         className={cx(
           styles.surface,
+          styles.sillX,
+          styles.forgeSurface,
           "mx-auto flex w-fit max-w-full flex-col items-center px-6 py-6 text-center sm:px-10",
         )}
       >
@@ -367,6 +391,7 @@ function RecallRung({
           className={cx(
             styles.axis,
             styles.surface,
+            styles.recallSurface,
             "rounded-l-none py-6 pl-6 pr-4 md:col-span-9 md:col-start-4 md:pl-10",
           )}
         >

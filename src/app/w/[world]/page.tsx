@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 
 import { BotRoster, RosterStratum } from "@/components/ladder/bot-roster";
 import { LadderRungs } from "@/components/ladder/ladder-rungs";
+import { RouteTransition } from "@/components/ladder/route-transition";
 import { AltitudeProvider } from "@/components/ui/altitude-provider";
 import { RatingNumeral } from "@/components/ui/rating-numeral";
 import { ScriptText, WorldFontPreload } from "@/components/ui/script-text";
@@ -60,103 +61,108 @@ export default async function WorldPage(props: PageProps<"/w/[world]">) {
       <WorldFontPreload world={raw} />
       <SkyLayer />
 
-      <div
-        className="relative flex min-h-dvh flex-col"
-        style={{ zIndex: "var(--z-content)" } as CSSProperties}
-      >
-        <div className="mx-auto w-full max-w-[1200px] px-5 pb-14 pt-8 sm:px-6 md:px-10 md:pb-20 md:pt-10 lg:px-16">
-          <Link
-            href="/"
-            className="t-body-sm inline-block rounded-[var(--r-1)] text-[color:var(--ink-650)] transition-colors duration-[var(--dur-fast)] hover:text-[color:var(--ink-900)]"
-          >
-            All worlds
-          </Link>
-
-          {/* Header. Latin name small and above, native script large: the
-              native form being larger is the thesis of entering a place.
-              The two halves of one item stay within 8px of each other, and
-              the standing sits on the opposite edge of the same row. */}
-          <header className="mt-10 grid gap-8 md:mt-14 md:grid-cols-12 md:items-end md:gap-10">
-            <div className="md:col-span-7">
-              <p className="t-label" style={{ color: "var(--text-tertiary)" }}>
-                {world.latinName}
-              </p>
-              <ScriptText
-                world={raw}
-                tier="display"
-                as="h1"
-                className="mt-1 text-[clamp(3rem,15vw,4.5rem)] leading-[1.02] text-[color:var(--ink-900)] md:text-[clamp(3.5rem,7vw,5rem)]"
-              >
-                {world.nativeName}
-              </ScriptText>
-              <p
-                className="mt-3 text-[1.0625rem]"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                {world.concept}
-              </p>
-            </div>
-
-            {/* Rated: the numeral and the band name, which is the one
-                eyebrow-shaped element this screen is allowed alongside the
-                world's Latin name. Unrated: nothing at all, because the
-                absence of a number is the invitation. */}
-            {skyRating === null || band === null ? null : (
-              <div className="md:col-span-4 md:col-start-9 md:justify-self-end">
-                <RatingNumeral
-                  value={skyRating}
-                  size="hero"
-                  band={band}
-                  label="Highest rating in this world"
-                  className="md:items-end"
-                />
-              </div>
-            )}
-          </header>
-        </div>
-
-        {/* The ladders. Full-width container so RECALL's wide left margin and
-            DUEL's outer edges have real room to be different from each other. */}
-        <div className="mx-auto w-full max-w-[1200px] px-5 sm:px-6 md:px-10 lg:px-16">
-          <LadderRungs world={raw} worldName={world.latinName} standings={ladders} />
-        </div>
-
-        {/* The roster sits on a full-bleed stratum. Not a card: it has no left
-            or right boundary, so it reads as a layer of the world with the sky
-            continuing above and below it. Depth is one surface lightness step
-            plus a light top edge and a dark bottom one. */}
-        <section
-          aria-labelledby="roster-heading"
-          className="mt-16 border-t border-[color:var(--hairline)] md:mt-24"
+      <RouteTransition>
+        <div
+          className="relative flex min-h-dvh flex-col"
+          style={{ zIndex: "var(--z-content)" } as CSSProperties}
         >
-          <RosterStratum>
-            <div className="mx-auto w-full max-w-[1200px] px-5 py-14 sm:px-6 md:px-10 md:py-20 lg:px-16">
-              <div className="grid gap-8 md:grid-cols-12 md:gap-10">
-                <div className="md:col-span-4">
-                  <h2
-                    id="roster-heading"
-                    className="t-display-3"
-                    style={{ color: "var(--text-primary)" }}
-                  >
-                    Who you meet here.
-                  </h2>
-                  <p
-                    className="t-body mt-4 max-w-[46ch]"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    These ratings are theirs. A match against one of them settles
-                    and leaves your own number where it was.
-                  </p>
-                </div>
+          <div className="mx-auto w-full max-w-[1200px] px-5 pb-14 pt-8 sm:px-6 md:px-10 md:pb-20 md:pt-10 lg:px-16">
+            <Link
+              href="/"
+              // Ascending. Browser back carries no transition type, so the only
+              // way the reverse direction can ever play is a real Link.
+              transitionTypes={["nav-back"]}
+              className="t-body-sm inline-block rounded-[var(--r-1)] text-[color:var(--ink-650)] transition-colors duration-[var(--dur-fast)] hover:text-[color:var(--ink-900)]"
+            >
+              All worlds
+            </Link>
 
-                <div className="md:col-span-7 md:col-start-6">
-                  <BotRoster bots={bots} delay={120} />
+            {/* Header. Latin name small and above, native script large: the
+                native form being larger is the thesis of entering a place.
+                The two halves of one item stay within 8px of each other, and
+                the standing sits on the opposite edge of the same row. */}
+            <header className="mt-10 grid gap-8 md:mt-14 md:grid-cols-12 md:items-end md:gap-10">
+              <div className="md:col-span-7">
+                <p className="t-label" style={{ color: "var(--text-tertiary)" }}>
+                  {world.latinName}
+                </p>
+                <ScriptText
+                  world={raw}
+                  tier="display"
+                  as="h1"
+                  className="mt-1 text-[clamp(3rem,15vw,4.5rem)] leading-[1.02] text-[color:var(--ink-900)] md:text-[clamp(3.5rem,7vw,5rem)]"
+                >
+                  {world.nativeName}
+                </ScriptText>
+                <p
+                  className="mt-3 text-[1.0625rem]"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  {world.concept}
+                </p>
+              </div>
+
+              {/* Rated: the numeral and the band name, which is the one
+                  eyebrow-shaped element this screen is allowed alongside the
+                  world's Latin name. Unrated: nothing at all, because the
+                  absence of a number is the invitation. */}
+              {skyRating === null || band === null ? null : (
+                <div className="md:col-span-4 md:col-start-9 md:justify-self-end">
+                  <RatingNumeral
+                    value={skyRating}
+                    size="hero"
+                    band={band}
+                    label="Highest rating in this world"
+                    className="md:items-end"
+                  />
+                </div>
+              )}
+            </header>
+          </div>
+
+          {/* The ladders. Full-width container so RECALL's wide left margin and
+              DUEL's outer edges have real room to be different from each other. */}
+          <div className="mx-auto w-full max-w-[1200px] px-5 sm:px-6 md:px-10 lg:px-16">
+            <LadderRungs world={raw} worldName={world.latinName} standings={ladders} />
+          </div>
+
+          {/* The roster sits on a full-bleed stratum. Not a card: it has no left
+              or right boundary, so it reads as a layer of the world with the sky
+              continuing above and below it. Depth is one surface lightness step
+              plus a light top edge and a dark bottom one. */}
+          <section
+            aria-labelledby="roster-heading"
+            className="mt-16 border-t border-[color:var(--hairline)] md:mt-24"
+          >
+            <RosterStratum>
+              <div className="mx-auto w-full max-w-[1200px] px-5 py-14 sm:px-6 md:px-10 md:py-20 lg:px-16">
+                <div className="grid gap-8 md:grid-cols-12 md:gap-10">
+                  <div className="md:col-span-4">
+                    <h2
+                      id="roster-heading"
+                      className="t-display-3"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      Who you meet here.
+                    </h2>
+                    <p
+                      className="t-body mt-4 max-w-[46ch]"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      These ratings are theirs. A match against one of them settles
+                      and leaves your own number where it was.
+                    </p>
+                  </div>
+
+                  <div className="md:col-span-7 md:col-start-6">
+                    <BotRoster bots={bots} delay={120} />
+                  </div>
                 </div>
               </div>
-            </div>
-          </RosterStratum>
-        </section>
-      </div>
+            </RosterStratum>
+          </section>
+        </div>
+      </RouteTransition>
     </AltitudeProvider>
   );
 }

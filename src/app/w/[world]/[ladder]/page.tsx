@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 
+import { RouteTransition } from "@/components/ladder/route-transition";
 import { LADDER_IDS, LADDER_NAMES, isLadderId, type LadderId } from "@/components/match/types";
 import { AltitudeProvider } from "@/components/ui/altitude-provider";
 import { Button, buttonClassName } from "@/components/ui/button";
@@ -78,34 +79,37 @@ function BeginMatch({ world, ladder }: { world: WorldId; ladder: LadderId }) {
   return (
     <AltitudeProvider world={world} ladderRatings={[null]} as="main">
       <SkyLayer />
-      <div
-        className="relative mx-auto flex min-h-dvh w-full max-w-[62ch] flex-col justify-center gap-6 px-6 py-24"
-        style={{ zIndex: "var(--z-content)" } as CSSProperties}
-      >
-        <p className="t-label" style={{ color: "var(--text-tertiary)" }}>
-          {definition.latinName} · {LADDER_NAMES[ladder]}
-        </p>
-        <h1 className="t-display-3" style={{ color: "var(--text-primary)" }}>
-          Ready when you are.
-        </h1>
-        <p className="t-body" style={{ color: "var(--text-secondary)" }}>
-          The task appears and the clock starts at the same moment. Your opponent
-          has already played, so nobody is waiting on you.
-        </p>
-        <form action={beginMatch} className="flex items-center gap-4 pt-2">
-          <input type="hidden" name="world" value={world} />
-          <input type="hidden" name="ladder" value={ladder} />
-          <Button type="submit" variant="primary">
-            Start the clock
-          </Button>
-          <Link
-            href={`/w/${world}`}
-            className={buttonClassName("quiet", "md")}
-          >
-            Back to {definition.latinName}
-          </Link>
-        </form>
-      </div>
+      <RouteTransition>
+        <div
+          className="relative mx-auto flex min-h-dvh w-full max-w-[62ch] flex-col justify-center gap-6 px-6 py-24"
+          style={{ zIndex: "var(--z-content)" } as CSSProperties}
+        >
+          <p className="t-label" style={{ color: "var(--text-tertiary)" }}>
+            {definition.latinName} · {LADDER_NAMES[ladder]}
+          </p>
+          <h1 className="t-display-3" style={{ color: "var(--text-primary)" }}>
+            Ready when you are.
+          </h1>
+          <p className="t-body" style={{ color: "var(--text-secondary)" }}>
+            The task appears and the clock starts at the same moment. Your opponent
+            has already played, so nobody is waiting on you.
+          </p>
+          <form action={beginMatch} className="flex items-center gap-4 pt-2">
+            <input type="hidden" name="world" value={world} />
+            <input type="hidden" name="ladder" value={ladder} />
+            <Button type="submit" variant="primary">
+              Start the clock
+            </Button>
+            <Link
+              href={`/w/${world}`}
+              transitionTypes={["nav-back"]}
+              className={buttonClassName("quiet", "md")}
+            >
+              Back to {definition.latinName}
+            </Link>
+          </form>
+        </div>
+      </RouteTransition>
     </AltitudeProvider>
   );
 }
@@ -141,7 +145,11 @@ function StartFailure({
           <Link href="/w/ja/duel" className={buttonClassName("primary", "md")}>
             Play Japanese
           </Link>
-          <Link href="/" className={buttonClassName("ghost", "md")}>
+          <Link
+            href="/"
+            transitionTypes={["nav-back"]}
+            className={buttonClassName("ghost", "md")}
+          >
             All worlds
           </Link>
         </>
@@ -162,7 +170,11 @@ function StartFailure({
               Try {LADDER_NAMES[id]}
             </Link>
           ))}
-          <Link href={`/w/${world}`} className={buttonClassName("quiet", "md")}>
+          <Link
+            href={`/w/${world}`}
+            transitionTypes={["nav-back"]}
+            className={buttonClassName("quiet", "md")}
+          >
             Back to {definition.latinName}
           </Link>
         </>
@@ -174,7 +186,11 @@ function StartFailure({
       body =
         "Guest sessions are capped per IP address, and a school, an office or anything else behind one shared address reaches that cap in ordinary use. An existing account is not affected by the cap. The limit resets within the hour.";
       exits = (
-        <Link href="/" className={buttonClassName("ghost", "md")}>
+        <Link
+          href="/"
+          transitionTypes={["nav-back"]}
+          className={buttonClassName("ghost", "md")}
+        >
           All worlds
         </Link>
       );
@@ -197,6 +213,7 @@ function StartFailure({
           ))}
           <Link
             href={`/w/${world}`}
+            transitionTypes={["nav-back"]}
             className={buttonClassName("quiet", "md")}
           >
             Back to {definition.latinName}
@@ -226,18 +243,20 @@ function StartFailure({
   return (
     <AltitudeProvider world={world} ladderRatings={[null]} as="main">
       <SkyLayer />
-      <div
-        className="relative mx-auto flex min-h-dvh w-full max-w-[62ch] flex-col justify-center gap-6 px-6 py-24"
-        style={{ zIndex: "var(--z-content)" } as CSSProperties}
-      >
-        <h1 className="t-display-3" style={{ color: "var(--text-primary)" }}>
-          {heading}
-        </h1>
-        <p className="t-body" style={{ color: "var(--text-secondary)" }}>
-          {body}
-        </p>
-        <div className="flex flex-wrap gap-3">{exits}</div>
-      </div>
+      <RouteTransition>
+        <div
+          className="relative mx-auto flex min-h-dvh w-full max-w-[62ch] flex-col justify-center gap-6 px-6 py-24"
+          style={{ zIndex: "var(--z-content)" } as CSSProperties}
+        >
+          <h1 className="t-display-3" style={{ color: "var(--text-primary)" }}>
+            {heading}
+          </h1>
+          <p className="t-body" style={{ color: "var(--text-secondary)" }}>
+            {body}
+          </p>
+          <div className="flex flex-wrap gap-3">{exits}</div>
+        </div>
+      </RouteTransition>
     </AltitudeProvider>
   );
 }

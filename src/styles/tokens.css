@@ -203,7 +203,31 @@
 :root,
 [data-world] {
   --haze: calc(0.94 - (var(--altitude) * 0.92));
-  --body-scale: calc(0.04 + (var(--altitude) * 0.68));
+  /* Fraction of viewport height the celestial body fills.
+   *
+   * QUADRATIC, not the linear `0.04 + altitude * 0.68` printed in §9.1. That
+   * expression only agrees with §5.2's own band table at the very top of the
+   * ladder and is roughly double it through the whole middle, which is where
+   * every real player stands. The table is in the codebase already, as
+   * `bodyFrame` in src/lib/design/altitude.ts, so the two were disagreeing in
+   * the same repository. Measured at each band floor, spec then linear then
+   * this:
+   *
+   *   Ridge            0.08   0.22   0.09
+   *   Above the Deck   0.18   0.36   0.20
+   *   The Long Light   0.30   0.43   0.27
+   *   Exosphere        0.48   0.54   0.43
+   *   Meridian         0.70   0.67   0.67
+   *
+   * This was invisible until the rated path was rendered for the first time: an
+   * unrated guest sits at altitude 0, where both curves agree at 0.04 and the
+   * body is gated off anyway. At Above the Deck the linear body is large enough
+   * to sit behind the FORGE column and take its small type below the contrast
+   * floor, which is §8.3's first product-specific trap.
+   *
+   * Still bottoms out at 0.04 rather than 0, because --body-op is what hides the
+   * body below Ridge and a zero scale would collapse the element instead. */
+  --body-scale: calc(0.04 + (var(--altitude) * var(--altitude) * 0.72));
   /* The body does not exist below Ridge. §5.2 gives Valley Floor and Treeline
      bodyFrame 0, and Ridge is the band where the celestial body first appears.
      --body-scale bottoms out at 0.04 rather than 0, so without this the body

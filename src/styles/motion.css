@@ -1,10 +1,18 @@
 /* ============================================================
    Motion
    docs/design/design-system.md §4
+   docs/design/discovery-view-transitions.md §2.5, §2.7
 
    The world breathes; the instrument does not. Ambient motion
    lives only in the sky layer. Nothing animates during a timed
    prompt. Only transform and opacity are ever animated.
+
+   Everything ambient here is slow, small and on a period that
+   does not divide into any of the others, so no two cycles ever
+   line up and the sky never reads as a loop. The amplitudes are
+   under the threshold at which a reader can watch one element
+   move: the sky is different when you look back at it. That is
+   the whole difference between weather and a screensaver.
    ============================================================ */
 
 /* Haze drift: two offset gradient layers at 34s and 51s. */
@@ -29,6 +37,120 @@
   }
   to {
     transform: translate3d(5%, 1%, 0);
+  }
+}
+
+/* Haze thickness. The air is not the same density for two minutes
+   running. Opacity only, and the two layers breathe on different
+   periods from each other and from their own drift, so the total is
+   never a single visible pulse. */
+@keyframes loxe-haze-breathe-a {
+  from,
+  to {
+    opacity: 0.84;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes loxe-haze-breathe-b {
+  from,
+  to {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Cloud deck: a long lateral drift at half the haze amplitude, because
+   it is farther away. */
+@keyframes loxe-deck-drift {
+  from {
+    transform: translate3d(-1.6%, 0, 0);
+  }
+  50% {
+    transform: translate3d(1.6%, 0.4%, 0);
+  }
+  to {
+    transform: translate3d(-1.6%, 0, 0);
+  }
+}
+
+/* Star scintillation. NOT per-star twinkle, which is banned in §4.4 and
+   is the single loudest tell in a night-sky UI. Two interleaved halves
+   of one field, in counterphase, at 64s and 97s. What a reader sees is
+   the sky clearing and dimming, which is the atmosphere between them
+   and it moving, not the stars themselves doing anything. */
+@keyframes loxe-star-breathe-a {
+  from,
+  to {
+    opacity: 0.78;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes loxe-star-breathe-b {
+  from,
+  to {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+/* Star drift: about 8px on a desktop viewport, over 143 seconds. */
+@keyframes loxe-star-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-0.62%, 0.34%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* The body rises and settles by about half a percent of the viewport.
+   At Valley Floor and Treeline it is invisible anyway (--body-op is 0
+   below Ridge), so this is motion the reader earns. */
+@keyframes loxe-body-drift {
+  from,
+  to {
+    transform: translate3d(0, 0.28%, 0);
+    opacity: 0.96;
+  }
+  50% {
+    transform: translate3d(0, -0.28%, 0);
+    opacity: 1;
+  }
+}
+
+/* Scroll lag. Distant things move less than near things, which is the
+   only reason a flat gradient reads as depth. Driven by the document
+   scroll timeline, so there is no scroll listener and no rAF: §8.1 bans
+   `window.addEventListener('scroll')` outright and §6.6 names a
+   scroll-driven animation as the mechanism. */
+@keyframes loxe-sky-lag-far {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 6vh, 0);
+  }
+}
+
+@keyframes loxe-sky-lag-near {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 2.5vh, 0);
   }
 }
 
@@ -58,10 +180,43 @@
   /* Ambient motion is opt-in and switchable off in one place: the
      match screen sets data-frozen, and reduced-motion kills it. */
   [data-ambient="haze-a"] {
-    animation: loxe-haze-drift-a 34s linear infinite;
+    animation:
+      loxe-haze-drift-a 34s linear infinite,
+      loxe-haze-breathe-a 71s ease-in-out infinite;
   }
   [data-ambient="haze-b"] {
-    animation: loxe-haze-drift-b 51s linear infinite;
+    animation:
+      loxe-haze-drift-b 51s linear infinite,
+      loxe-haze-breathe-b 89s ease-in-out infinite;
+  }
+  [data-ambient="deck-drift"] {
+    animation: loxe-deck-drift 118s ease-in-out infinite;
+  }
+  [data-ambient="star-breathe-a"] {
+    animation: loxe-star-breathe-a 64s ease-in-out infinite;
+  }
+  [data-ambient="star-breathe-b"] {
+    animation: loxe-star-breathe-b 97s ease-in-out infinite;
+  }
+  [data-ambient="star-drift"] {
+    animation: loxe-star-drift 143s ease-in-out infinite;
+  }
+  [data-ambient="body-drift"] {
+    animation: loxe-body-drift 97s ease-in-out infinite;
+  }
+
+  /* Scroll-driven, so it only exists where the feature does. Nothing to
+     fall back to: without it the sky is still on this axis and every
+     other cycle carries on. */
+  @supports (animation-timeline: scroll(root block)) {
+    [data-ambient="sky-lag-far"] {
+      animation: loxe-sky-lag-far linear both;
+      animation-timeline: scroll(root block);
+    }
+    [data-ambient="sky-lag-near"] {
+      animation: loxe-sky-lag-near linear both;
+      animation-timeline: scroll(root block);
+    }
   }
 
   /* The world visibly freezes when a match starts. */
@@ -84,5 +239,151 @@
   [data-glass] {
     background: color-mix(in oklab, var(--surface-2) 72%, transparent);
     backdrop-filter: blur(20px) saturate(1.1);
+  }
+}
+
+/* ============================================================
+   Route transitions
+   docs/design/discovery-view-transitions.md §2.5
+
+   One screen becoming another. The direction is supplied by the
+   link as a transition type, which React maps to a
+   view-transition-class; the classes below are what those maps
+   name. An untyped navigation (browser back, a revalidation, a
+   Suspense reveal, or anything in Firefox, which has
+   same-document view transitions but not types) resolves to
+   `default: "none"` in RouteTransition and gets a clean cut.
+
+   Durations and easings are the existing tokens. Nothing new is
+   invented here, so a route change is paced like the rest of the
+   product rather than like a demo.
+   ============================================================ */
+
+/* A transition must never swallow a tap. */
+::view-transition {
+  pointer-events: none;
+}
+
+@keyframes loxe-vt-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes loxe-vt-slide {
+  from {
+    translate: var(--vt-slide-offset);
+  }
+  to {
+    translate: 0;
+  }
+}
+
+/* Descending into a ladder: the outgoing screen leaves to the left and
+   the incoming one arrives from the right. */
+::view-transition-old(.nav-forward) {
+  --vt-slide-offset: -56px;
+  animation:
+    var(--dur-fast) var(--ease-standard) both loxe-vt-fade reverse,
+    var(--dur-slow) var(--ease-atmos) both loxe-vt-slide reverse;
+}
+::view-transition-new(.nav-forward) {
+  --vt-slide-offset: 56px;
+  animation:
+    var(--dur-base) var(--ease-standard) var(--dur-fast) both loxe-vt-fade,
+    var(--dur-slow) var(--ease-atmos) both loxe-vt-slide;
+}
+
+/* Climbing back out. Same pair, mirrored. */
+::view-transition-old(.nav-back) {
+  --vt-slide-offset: 56px;
+  animation:
+    var(--dur-fast) var(--ease-standard) both loxe-vt-fade reverse,
+    var(--dur-slow) var(--ease-atmos) both loxe-vt-slide reverse;
+}
+::view-transition-new(.nav-back) {
+  --vt-slide-offset: -56px;
+  animation:
+    var(--dur-base) var(--ease-standard) var(--dur-fast) both loxe-vt-fade,
+    var(--dur-slow) var(--ease-atmos) both loxe-vt-slide;
+}
+
+/* Any screen without its own RouteTransition still gets snapshotted as
+   the root. A crossfade at the utilitarian duration keeps that case
+   from being a hard cut next to a screen that slides. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-base);
+  animation-timing-function: var(--ease-standard);
+}
+
+/* The sky does not slide. It is the spatial anchor: the reader descends
+   into the same sky rather than being handed a new one. The old
+   snapshot is dropped rather than crossfaded, which is also the
+   documented workaround for a captured backdrop-filter. */
+::view-transition-group(loxe-sky) {
+  animation: none;
+}
+::view-transition-old(loxe-sky) {
+  display: none;
+}
+::view-transition-new(loxe-sky) {
+  animation: none;
+}
+
+/* ============================================================
+   Reduced motion
+
+   Two separate jobs, and conflating them is the usual mistake.
+
+   The `*` reset in base.css does NOT reach view-transition
+   pseudo-elements: they live in their own pseudo-element tree
+   rooted at the document, and `*` does not match them. So the
+   route transition needs its own block.
+
+   And DELAYS are not durations. The base reset collapses
+   duration and leaves delay alone, so an element with a 460ms
+   delay is still absent for 460ms and then appears. A held-back
+   element is a missing element whatever the reason, so every
+   delay is zeroed here as well.
+
+   What survives is a 180ms crossfade, which is exactly what
+   §4.5 asks of the world-entry dive. Collapsing it to zero would
+   contradict the spec; leaving the translate in would contradict
+   the reader.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-delay: 0s !important;
+    animation-duration: var(--dur-fast) !important;
+  }
+
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-name: loxe-vt-fade !important;
+  }
+
+  ::view-transition-old(*) {
+    animation-direction: reverse !important;
+  }
+
+  /* Still no movement for the sky, reduced motion or not. */
+  ::view-transition-group(loxe-sky) {
+    animation: none !important;
+  }
+  ::view-transition-old(loxe-sky) {
+    display: none;
+  }
+
+  /* The ambient sky is off (base.css sets `animation: none` on
+     [data-ambient]); this makes sure nothing is merely postponed. */
+  [data-ambient] {
+    animation: none !important;
+    animation-delay: 0s !important;
   }
 }
