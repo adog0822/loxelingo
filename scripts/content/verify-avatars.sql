@@ -69,7 +69,10 @@ values ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-0000000
 insert into public.user_avatars (user_id, world_slug, avatar_slug, theta, origin_theta)
 values ('11111111-1111-1111-1111-111111111111', 'ja', 'nell', 0.42, 0.42);
 update public.user_avatars
-   set theta = 1.90, stage = 4, lessons_taught = 12, last_taught_at = now()
+   -- teaching_net is set alongside stage because the teaching-loop migration
+   -- added user_avatars_stage_matches_net: stage = 1 + net/3, so a stage
+   -- written without its counter is now rejected. 9 is the floor of stage 4.
+   set theta = 1.90, stage = 4, teaching_net = 9, lessons_taught = 12, last_taught_at = now()
  where avatar_slug = 'nell';
 select avatar_slug, stage, theta, origin_theta, lessons_taught from public.user_avatars;
 
