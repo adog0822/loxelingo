@@ -263,6 +263,6 @@ describe('display scale (presentation only)', () => {
     // See the rationale on DISPLAY_INIT in elo.ts; the constants and their SQL
     // counterpart are pinned by display-scale.test.ts.
     expect(toDisplayScale(0)).toBe(DISPLAY_INIT);
-    expect(DISPLAY_INIT).toBe(900);
+    expect(DISPLAY_INIT).toBe(1000);
   });
 });

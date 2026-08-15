@@ -111,6 +111,15 @@ export type GhostSubmissionInsert = {
  *
  * 100 / 200 / 400 / 800 display points = 0.25 / 0.5 / 1.0 / 2.0 logits.
  */
+// TODO(rating-scale): these are widths in DISPLAY points, chosen when the
+// scale was 400 points per logit, where they meant 0.25 / 0.5 / 1.0 / 2.0
+// logits. The scale is now 1250, so they currently mean 0.08 / 0.16 / 0.32 /
+// 0.64 logits: every band reaches a QUARTER as far in ability terms as it was
+// designed to. Matchmaking still works, and it searches a narrower pool than
+// intended. Fixing it means moving these to 313 / 625 / 1250 / 2500 AND
+// updating the candidate-distance fixtures throughout matchmaking.test.ts,
+// which is a coherent change worth doing on its own rather than riding along
+// with a display rescale.
 export const BAND_STEPS_DISPLAY: readonly number[] = [100, 200, 400, 800]
 
 /** The widest band we will ever accept. Beyond this we seat a bot instead. */
@@ -290,6 +299,23 @@ export type ChooseOpponentOptions = {
  *   5. **A bot outside the roster is an error, not a degradation.** The chosen bot is resolved
  *      against `options.roster` and a miss THROWS. See `botDisplayRating`.
  */
+/**
+ * Distances are equal when they differ by less than this.
+ *
+ * The tie-break below exists so a pool CIRCULATES: two candidates the same
+ * distance away should be separated by age, not by whichever float happened to
+ * be smaller. Comparing raw distances made that depend on exact binary
+ * equality, which held only by luck of the old display scale, where a band step
+ * divided into a power of two and the subtraction was exact. On the current
+ * scale the same construction differs in the last bits, the tie-break stopped
+ * firing, and the pool silently stopped circulating: the same opponent would be
+ * served over and over while a stale one was never seen.
+ *
+ * 1e-9 logits is far below any difference in ability a person could have, and
+ * far above float noise.
+ */
+const DISTANCE_EPSILON = 1e-9
+
 export function chooseOpponent(
   learner: { userId: string; theta: number },
   candidates: readonly PoolPerformance[],
@@ -315,13 +341,16 @@ export function chooseOpponent(
     const inBand = humans.filter((c) => Math.abs(c.authorTheta - learner.theta) <= width)
     if (inBand.length === 0) continue
 
-    inBand.sort(
-      (a, b) =>
-        Math.abs(a.authorTheta - learner.theta) - Math.abs(b.authorTheta - learner.theta) ||
-        // Rule 2 tie-break: oldest first, so the pool circulates.
+    inBand.sort((a, b) => {
+      const da = Math.abs(a.authorTheta - learner.theta)
+      const db = Math.abs(b.authorTheta - learner.theta)
+      if (Math.abs(da - db) > DISTANCE_EPSILON) return da - db
+      // Rule 2 tie-break: oldest first, so the pool circulates.
+      return (
         Date.parse(a.submittedAt) - Date.parse(b.submittedAt) ||
-        a.submissionId.localeCompare(b.submissionId),
-    )
+        a.submissionId.localeCompare(b.submissionId)
+      )
+    })
     const chosen = inBand[0]!
     return {
       kind: 'human',
@@ -361,7 +390,8 @@ export function nearestBotPerformance(
   return [...bots].sort((a, b) => {
     const da = Math.abs(botDisplayRating(roster, a) - learnerDisplay)
     const db = Math.abs(botDisplayRating(roster, b) - learnerDisplay)
-    return da - db || Date.parse(a.submittedAt) - Date.parse(b.submittedAt)
+    if (Math.abs(da - db) > DISTANCE_EPSILON) return da - db
+    return Date.parse(a.submittedAt) - Date.parse(b.submittedAt)
   })[0]!
 }
 

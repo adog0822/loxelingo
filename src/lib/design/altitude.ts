@@ -4,7 +4,7 @@
  *
  * A single scalar drives the whole environment:
  *
- *   --altitude: clamp(0, (rating - 700) / 1500, 1)
+ *   --altitude: clamp(0, rating / 8800, 1)
  *
  * Continuous scalar, discrete named thresholds. Continuous means every
  * single match visibly moves the sky, so progress is always felt.
@@ -17,10 +17,10 @@
  */
 
 /** Rating at which altitude 0 sits. */
-export const ALTITUDE_FLOOR_RATING = 700;
+export const ALTITUDE_FLOOR_RATING = 0;
 
 /** Rating span from altitude 0 to altitude 1. */
-export const ALTITUDE_SPAN_RATING = 1500;
+export const ALTITUDE_SPAN_RATING = 8800;
 
 /** Rating at which altitude 1 is reached. */
 export const ALTITUDE_CEILING_RATING = ALTITUDE_FLOOR_RATING + ALTITUDE_SPAN_RATING;
@@ -73,7 +73,7 @@ export const BANDS: readonly Band[] = [
     index: 1,
     name: "Valley Floor",
     floor: Number.NEGATIVE_INFINITY,
-    ceiling: 900,
+    ceiling: 1000,
     haze: 0.92,
     bodyFrame: 0,
     stars: "none",
@@ -85,8 +85,8 @@ export const BANDS: readonly Band[] = [
     id: "treeline",
     index: 2,
     name: "Treeline",
-    floor: 900,
-    ceiling: 1100,
+    floor: 1000,
+    ceiling: 1800,
     haze: 0.76,
     bodyFrame: 0,
     stars: "faint",
@@ -98,8 +98,8 @@ export const BANDS: readonly Band[] = [
     id: "ridge",
     index: 3,
     name: "Ridge",
-    floor: 1100,
-    ceiling: 1300,
+    floor: 1800,
+    ceiling: 2800,
     haze: 0.58,
     bodyFrame: 0.08,
     stars: "upper",
@@ -111,8 +111,8 @@ export const BANDS: readonly Band[] = [
     id: "above-the-deck",
     index: 4,
     name: "Above the Deck",
-    floor: 1300,
-    ceiling: 1550,
+    floor: 2800,
+    ceiling: 4400,
     haze: 0.38,
     bodyFrame: 0.18,
     stars: "full",
@@ -124,8 +124,8 @@ export const BANDS: readonly Band[] = [
     id: "long-light",
     index: 5,
     name: "The Long Light",
-    floor: 1550,
-    ceiling: 1800,
+    floor: 4400,
+    ceiling: 6400,
     haze: 0.22,
     bodyFrame: 0.3,
     stars: "dense",
@@ -137,8 +137,8 @@ export const BANDS: readonly Band[] = [
     id: "exosphere",
     index: 6,
     name: "Exosphere",
-    floor: 1800,
-    ceiling: 2100,
+    floor: 6400,
+    ceiling: 8800,
     haze: 0.1,
     bodyFrame: 0.48,
     stars: "hard",
@@ -150,7 +150,7 @@ export const BANDS: readonly Band[] = [
     id: "meridian",
     index: 7,
     name: "Meridian",
-    floor: 2100,
+    floor: 8800,
     ceiling: null,
     haze: 0.02,
     bodyFrame: 0.7,
@@ -181,7 +181,7 @@ function clamp01(value: number): number {
 }
 
 /**
- * The scalar. `clamp(0, (rating - 700) / 1500, 1)`.
+ * The scalar. `clamp(0, rating / 8800, 1)`.
  */
 export function altitudeFromRating(rating: number): number {
   return clamp01((rating - ALTITUDE_FLOOR_RATING) / ALTITUDE_SPAN_RATING);

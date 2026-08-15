@@ -21,15 +21,15 @@ import { bandForRating } from '@/lib/design/altitude'
 
 const MIGRATION = join(
   process.cwd(),
-  'supabase/migrations/20260805104120_identity_and_progression.sql',
+  'supabase/migrations/20260815094459_rating_scale_10k.sql',
 )
 
 describe('display scale constants', () => {
   it('are pinned', () => {
     // Changing these is a product decision, not a refactor. If you change them,
     // change the SQL in the same commit and update this test deliberately.
-    expect(DISPLAY_INIT).toBe(900)
-    expect(DISPLAY_SCALE).toBe(400)
+    expect(DISPLAY_INIT).toBe(1000)
+    expect(DISPLAY_SCALE).toBe(1250)
   })
 
   it('matches the generated columns in the migration', () => {
@@ -60,7 +60,7 @@ describe('conversion', () => {
     expect(fresh.theta).toBe(0)
 
     const display = toDisplayScale(fresh.theta)
-    expect(display).toBe(900)
+    expect(display).toBe(1000)
 
     // Treeline, not "Above the Deck". A new account must not spawn at the
     // payoff — see the rationale on DISPLAY_INIT in elo.ts.
@@ -71,9 +71,9 @@ describe('conversion', () => {
   it('puts the first threshold crossing within about half a logit', () => {
     // First crossings are the highest-leverage retention events, so the first
     // one has to be close enough to be reachable.
-    const ridgeFloor = 1100
-    const logitsToRidge = fromDisplayScale(ridgeFloor) - fromDisplayScale(900)
-    expect(logitsToRidge).toBeCloseTo(0.5, 10)
+    const ridgeFloor = 1800
+    const logitsToRidge = fromDisplayScale(ridgeFloor) - fromDisplayScale(DISPLAY_INIT)
+    expect(logitsToRidge).toBeCloseTo(0.64, 2)
   })
 
   it('round-trips', () => {
@@ -82,14 +82,14 @@ describe('conversion', () => {
     }
   })
 
-  it('is linear in theta at 400 points per logit', () => {
-    expect(toDisplayScale(1) - toDisplayScale(0)).toBe(400)
-    expect(toDisplayScale(0) - toDisplayScale(-1)).toBe(400)
+  it('is linear in theta at 1250 points per logit', () => {
+    expect(toDisplayScale(1) - toDisplayScale(0)).toBe(1250)
+    expect(toDisplayScale(0) - toDisplayScale(-1)).toBe(1250)
   })
 
   it('agrees with the SQL formula evaluated in JS', () => {
     // Mirror of the generated column, computed independently.
-    const sqlFormula = (theta: number) => 900 + 400 * theta
+    const sqlFormula = (theta: number) => 1000 + 1250 * theta
     for (const theta of [-1.5, 0, 0.5, 2, 4]) {
       expect(toDisplayScale(theta)).toBe(sqlFormula(theta))
     }

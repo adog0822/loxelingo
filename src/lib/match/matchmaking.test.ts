@@ -108,7 +108,9 @@ describe('rating bands', () => {
     for (const points of [0, 100, 200, 400, 800, 1200]) {
       expect(bandWidthLogits(points)).toBeCloseTo(points / DISPLAY_SCALE, 12)
     }
-    expect(bandWidthLogits(400)).toBeCloseTo(1, 12)
+    // One scale-width is one logit, by definition. Asserted against the
+    // constant rather than a literal, so a rescale cannot leave this stale.
+    expect(bandWidthLogits(DISPLAY_SCALE)).toBeCloseTo(1, 12)
   })
 
   it('the widening schedule is monotone and its last step is the cap', () => {

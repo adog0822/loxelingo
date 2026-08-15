@@ -240,8 +240,49 @@ export function updateItemOnly(
  * the first threshold crossing (Ridge, 1100) about half a logit away, and first
  * crossings are the highest-leverage retention events in a rating system.
  */
-export const DISPLAY_INIT = 900;
-export const DISPLAY_SCALE = 400;
+/**
+ * ── THE 0–10,000 SCALE, AND WHY THE WIDE RANGE IS SAFE ──────────────────────
+ *
+ * A fresh account displays 1000. The summit sits near 10,000.
+ *
+ *   display = 1000 + 1250 * theta
+ *
+ * Chess tops out near 3000, which makes the top of a ladder feel like a number
+ * rather than a summit. The span here is chosen so the distance from a first
+ * match to the top reads as a real climb.
+ *
+ * WHY 1250 PER LOGIT. A learner population is genuinely wide: absolute beginner
+ * to native is roughly 7 logits of ability, far wider than the spread among
+ * chess players, who are all already chess players. Mapping that onto 0–10,000:
+ *
+ *   theta  0.0  ->  1000   a new account
+ *   theta  0.64 ->  1800   Ridge, the first threshold crossing
+ *   theta  7.2  -> 10,000  the summit
+ *   theta -0.8  ->     0   the floor; you can fall, and not far
+ *
+ * WHY THE SWINGS DO NOT GET WORSE, which is the objection to a wide scale.
+ * A match moves theta by at most K, and `learnerK` starts at aUser = 1.0, so a
+ * first match can move 1250 points. That looks enormous until it is taken as a
+ * share of the range:
+ *
+ *   before   400 points against a 900–2100 practical range   ~33% of the span
+ *   after   1250 points against a 1000–10,000 range          ~12.5% of the span
+ *
+ * The number moves in larger steps and the ladder is proportionally CALMER,
+ * because K decays with games played while the span stays fixed. A settled
+ * player at n = 100 has K ≈ 0.167, or about 210 points.
+ *
+ * ── SINGLE SOURCE OF TRUTH ──────────────────────────────────────────────────
+ * These two constants are duplicated in exactly one other place: the
+ * `generated always as (...)` expressions on `user_ratings.rating` and
+ * `peak_rating`. Postgres cannot call TypeScript, so the formula is written
+ * twice. CHANGE BOTH TOGETHER. `display-scale.test.ts` reads the migration file
+ * and fails on a one-sided edit, which exists because this code once carried
+ * three inconsistent formulas at once and the same player showed different
+ * ratings on different screens.
+ */
+export const DISPLAY_INIT = 1000;
+export const DISPLAY_SCALE = 1250;
 
 export const toDisplayScale = (
   logit: number,
