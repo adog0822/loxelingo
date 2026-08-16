@@ -102,10 +102,33 @@ const bot = (slug: string, theta: number, over: Partial<PoolPerformance> = {}): 
 /** theta such that the display rating is exactly `display`. */
 const thetaFor = (display: number) => (display - DISPLAY_INIT) / DISPLAY_SCALE
 
+/**
+ * The candidate fixtures below are placed in BAND WIDTHS, never in bare display points.
+ *
+ * A candidate "150 points away" only means something next to the schedule it is being measured
+ * against, and the two drifted apart once already: the schedule was written for 400 points per
+ * logit, the display scale moved to 1250, and every band silently reached a quarter as far
+ * while these fixtures kept passing. Saying `above(band(1) * 0.5)` instead of `thetaFor(1650)`
+ * makes a fixture mean "half way into band 1", which is the thing each test is actually about,
+ * and it moves with the schedule the next time the scale changes.
+ */
+const band = (step: number): number => BAND_STEPS_DISPLAY[step]!
+
+/** The learner every band test is centred on. Mid-ladder, so bands reach both ways. */
+const LEARNER_DISPLAY = 1500
+const me = { userId: 'me', theta: thetaFor(LEARNER_DISPLAY) }
+
+/** An author `points` display points above / below the learner. */
+const above = (points: number) => thetaFor(LEARNER_DISPLAY + points)
+const below = (points: number) => thetaFor(LEARNER_DISPLAY - points)
+
+/** Far enough out that every band, including the cap, misses. */
+const PAST_THE_CAP = MAX_BAND_DISPLAY * 1.125
+
 describe('rating bands', () => {
   it('a band width in display points converts to logits without redefining the scale', () => {
     // Pins DISPLAY_INIT and DISPLAY_SCALE together: if either moves one-sidedly, this fails.
-    for (const points of [0, 100, 200, 400, 800, 1200]) {
+    for (const points of [0, ...BAND_STEPS_DISPLAY, 1200]) {
       expect(bandWidthLogits(points)).toBeCloseTo(points / DISPLAY_SCALE, 12)
     }
     // One scale-width is one logit, by definition. Asserted against the
@@ -113,30 +136,46 @@ describe('rating bands', () => {
     expect(bandWidthLogits(DISPLAY_SCALE)).toBeCloseTo(1, 12)
   })
 
-  it('the widening schedule is monotone and its last step is the cap', () => {
+  it('the widening schedule is monotone, ends at the cap, and reaches the ability it was designed for', () => {
     for (let i = 1; i < BAND_STEPS_DISPLAY.length; i++) {
       expect(BAND_STEPS_DISPLAY[i]!).toBeGreaterThan(BAND_STEPS_DISPLAY[i - 1]!)
     }
     expect(MAX_BAND_DISPLAY).toBe(BAND_STEPS_DISPLAY[BAND_STEPS_DISPLAY.length - 1])
-    expect(MAX_BAND_DISPLAY).toBe(800)
+
+    // THE POINT OF THIS TEST. A band is a decision about ABILITY: a quarter, a half, one and
+    // two logits of reach. Display points are only how that decision is stated, so the schedule
+    // has to be restated whenever DISPLAY_SCALE moves. Asserting the reach rather than the
+    // numbers is what makes a schedule left behind by a rescale fail here instead of quietly
+    // matching a narrower pool. Compared in display points, where the rounding is legible: a
+    // quarter logit is 312.5 points and the schedule states it as a whole 313.
+    const intendedLogits = [0.25, 0.5, 1.0, 2.0]
+    expect(BAND_STEPS_DISPLAY).toHaveLength(intendedLogits.length)
+    intendedLogits.forEach((logits, i) => {
+      const step = BAND_STEPS_DISPLAY[i]!
+      expect(Number.isInteger(step)).toBe(true)
+      expect(Math.abs(step - logits * DISPLAY_SCALE)).toBeLessThanOrEqual(0.5)
+    })
+    expect(bandWidthLogits(MAX_BAND_DISPLAY)).toBeCloseTo(2, 12)
   })
 })
 
 describe('chooseOpponent — self-match exclusion', () => {
+  // A fresh account, at the init of the display scale. These tests are about WHO is eligible,
+  // so the learner sits where a new player sits rather than mid-ladder with `me`.
+  const newcomer = { userId: 'me', theta: 0 }
+
   it('never matches a user against their own stored submission', () => {
-    const me = { userId: 'me', theta: 0 }
     const mine = human({ submissionId: 's-mine', authorUserId: 'me', authorTheta: 0 })
     const theirs = human({ submissionId: 's-theirs', authorUserId: 'you', authorTheta: 0.2 })
 
-    const d = chooseOpponent(me, [mine, theirs], withJaRoster())
+    const d = chooseOpponent(newcomer, [mine, theirs], withJaRoster())
     expect(d.kind).toBe('human')
     if (d.kind === 'human') expect(d.performance.authorUserId).toBe('you')
   })
 
   it('falls all the way through to a bot rather than serving a user their own answer', () => {
-    const me = { userId: 'me', theta: 0 }
     const d = chooseOpponent(
-      me,
+      newcomer,
       [
         human({ submissionId: 's1', authorUserId: 'me' }),
         human({ submissionId: 's2', authorUserId: 'me', authorTheta: 0.05 }),
@@ -149,9 +188,8 @@ describe('chooseOpponent — self-match exclusion', () => {
   })
 
   it('excludes authors this learner has already faced on the item', () => {
-    const me = { userId: 'me', theta: 0 }
     const d = chooseOpponent(
-      me,
+      newcomer,
       [
         human({ submissionId: 's1', authorUserId: 'rival', authorTheta: 0 }),
         human({ submissionId: 's2', authorUserId: 'stranger', authorTheta: 0.3 }),
@@ -164,15 +202,15 @@ describe('chooseOpponent — self-match exclusion', () => {
 })
 
 describe('chooseOpponent — progressive band widening', () => {
-  const me = { userId: 'me', theta: thetaFor(1500) }
-
   it('uses the tightest band that contains anyone, and takes the nearest inside it', () => {
     const d = chooseOpponent(
       me,
       [
-        human({ submissionId: 'near', authorTheta: thetaFor(1540) }), // 40 pts
-        human({ submissionId: 'nearer', authorTheta: thetaFor(1510) }), // 10 pts
-        human({ submissionId: 'far', authorTheta: thetaFor(1900) }),
+        human({ submissionId: 'near', authorTheta: above(band(0) * 0.4) }),
+        human({ submissionId: 'nearer', authorTheta: above(band(0) * 0.1) }),
+        // Outside the first two bands entirely, so it can only win if the search stops
+        // preferring the tighter band.
+        human({ submissionId: 'far', authorTheta: above(band(2) * 0.9) }),
       ],
       withJaRoster(),
     )
@@ -180,31 +218,32 @@ describe('chooseOpponent — progressive band widening', () => {
     if (d.kind === 'human') {
       expect(d.performance.submissionId).toBe('nearer')
       expect(d.bandStep).toBe(0)
-      expect(d.bandDisplayPoints).toBe(100)
-      expect(d.gapDisplayPoints).toBeCloseTo(10, 6)
+      expect(d.bandDisplayPoints).toBe(band(0))
+      expect(d.gapDisplayPoints).toBeCloseTo(band(0) * 0.1, 6)
     }
   })
 
   it('widens step by step when the tight bands are empty', () => {
-    // Only opponent is 350 display points away: bands 100 and 200 miss, 400 catches.
+    // The only opponent sits between band 1 and band 2: the first two bands miss, the third
+    // catches, and the reported step says which one did.
     const d = chooseOpponent(
       me,
-      [human({ submissionId: 'x', authorTheta: thetaFor(1850) })],
+      [human({ submissionId: 'x', authorTheta: above((band(1) + band(2)) / 2) })],
       withJaRoster(),
     )
     expect(d.kind).toBe('human')
     if (d.kind === 'human') {
       expect(d.bandStep).toBe(2)
-      expect(d.bandDisplayPoints).toBe(400)
+      expect(d.bandDisplayPoints).toBe(band(2))
     }
   })
 
-  it('widening is progressive, not a single wide net: a 150-point opponent loses to a 90-point one', () => {
+  it('widening is progressive, not a single wide net: a band-1 opponent loses to a band-0 one', () => {
     const d = chooseOpponent(
       me,
       [
-        human({ submissionId: 'mid', authorTheta: thetaFor(1650) }), // 150 pts, band 1
-        human({ submissionId: 'closest', authorTheta: thetaFor(1450) }), // 50 pts, band 0
+        human({ submissionId: 'mid', authorTheta: above(band(0) * 1.5) }), // past band 0, in band 1
+        human({ submissionId: 'closest', authorTheta: below(band(0) * 0.5) }), // in band 0
       ],
       withJaRoster(),
     )
@@ -216,11 +255,14 @@ describe('chooseOpponent — progressive band widening', () => {
   })
 
   it('circulates the pool: equal-distance candidates break toward the oldest performance', () => {
+    // Equal distances built the way a real pool builds them: one above the learner and one
+    // below, each divided through the display scale. That also exercises the tie-break
+    // surviving two distances that are equal in ability and differ in their last bits.
     const d = chooseOpponent(
       me,
       [
-        human({ submissionId: 'fresh', authorTheta: thetaFor(1550), submittedAt: T(30) }),
-        human({ submissionId: 'stale', authorTheta: thetaFor(1450), submittedAt: T(1) }),
+        human({ submissionId: 'fresh', authorTheta: above(band(0) * 0.5), submittedAt: T(30) }),
+        human({ submissionId: 'stale', authorTheta: below(band(0) * 0.5), submittedAt: T(1) }),
       ],
       withJaRoster(),
     )
@@ -228,26 +270,34 @@ describe('chooseOpponent — progressive band widening', () => {
     if (d.kind === 'human') expect(d.performance.submissionId).toBe('stale')
   })
 
-  it('accepts a candidate exactly on the band edge', () => {
-    const d = chooseOpponent(
-      me,
-      [human({ submissionId: 'edge', authorTheta: thetaFor(1600) })],
-      withJaRoster(),
-    )
-    expect(d.kind).toBe('human')
-    if (d.kind === 'human') expect(d.bandDisplayPoints).toBe(100)
+  it('accepts a candidate exactly on the band edge, at every step', () => {
+    // "Within 313 points" includes 313. Checked at every step rather than the first, because
+    // whether an exactly-on-the-edge rating survives the round trip through the display scale
+    // differs step by step: with the previous schedule it held at 100 points and failed at 200,
+    // which made the promise a property of the arithmetic instead of the product.
+    BAND_STEPS_DISPLAY.forEach((width, step) => {
+      const d = chooseOpponent(
+        me,
+        [human({ submissionId: 'edge', authorTheta: above(width) })],
+        withJaRoster(),
+      )
+      expect(d.kind).toBe('human')
+      if (d.kind === 'human') {
+        expect(d.bandStep).toBe(step)
+        expect(d.bandDisplayPoints).toBe(width)
+      }
+    })
   })
 })
 
 describe('chooseOpponent — the cap and the bot fallback', () => {
-  const me = { userId: 'me', theta: thetaFor(1500) }
-
   it('stops widening at the cap and seats a bot instead of a wildly mismatched human', () => {
-    // 900 display points away — beyond the 800-point cap.
+    // The only human sits past the widest band, where the expected score is lopsided enough
+    // that rule 3 prefers a bot to a human at any distance.
     const d = chooseOpponent(
       me,
       [
-        human({ submissionId: 'miles-away', authorTheta: thetaFor(2400) }),
+        human({ submissionId: 'miles-away', authorTheta: above(PAST_THE_CAP) }),
         bot('kaori', thetaFor(1580)),
       ],
       withJaRoster(),
@@ -268,7 +318,11 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
   it('returns none — never a fabricated opponent — when there is no bot either', () => {
     expect(chooseOpponent(me, [], withJaRoster()).kind).toBe('none')
     expect(
-      chooseOpponent(me, [human({ submissionId: 's', authorTheta: thetaFor(2400) })], withJaRoster()),
+      chooseOpponent(
+        me,
+        [human({ submissionId: 's', authorTheta: above(PAST_THE_CAP) })],
+        withJaRoster(),
+      ),
     ).toEqual({
       kind: 'none',
       reason: 'no_opponent_available',
@@ -279,7 +333,7 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
     const d = chooseOpponent(
       me,
       [
-        human({ submissionId: 'edge', authorTheta: thetaFor(2300) }), // exactly 800 pts
+        human({ submissionId: 'edge', authorTheta: above(MAX_BAND_DISPLAY) }), // exactly at the cap
         bot('kaori', thetaFor(1580)),
       ],
       withJaRoster(),
@@ -307,8 +361,6 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
 })
 
 describe('the roster is per-world content, not a constant', () => {
-  const me = { userId: 'me', theta: thetaFor(1500) }
-
   it('the same rung is a different character in each world', () => {
     // The whole point of the refactor: `archetype` is the rung and is shared, so a feature can
     // ask for "the 1580" in any world; the NAME is local and must differ.
@@ -362,7 +414,7 @@ describe('the roster is per-world content, not a constant', () => {
     const roster = emptyBotRoster('ko')
     const d = chooseOpponent(
       me,
-      [human({ submissionId: 's', authorTheta: thetaFor(1520) })],
+      [human({ submissionId: 's', authorTheta: above(band(0) * 0.1) })],
       { roster },
     )
     expect(d.kind).toBe('human')

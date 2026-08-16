@@ -105,22 +105,23 @@ export type GhostSubmissionInsert = {
 // ---------------------------------------------------------------------------
 
 /**
- * Progressive widening schedule, in DISPLAY points (the 900-2100 number a player actually
- * sees), because a band is a product decision and "within 100 points" is the only form of it
+ * Progressive widening schedule, in DISPLAY points (the 0-10,000 number a player actually
+ * sees), because a band is a product decision and "within 313 points" is the only form of it
  * anyone can reason about. Converted to logits before use.
  *
- * 100 / 200 / 400 / 800 display points = 0.25 / 0.5 / 1.0 / 2.0 logits.
+ * THE SCHEDULE IS DEFINED IN LOGITS AND EXPRESSED IN POINTS. The reach a band is meant to have
+ * is 0.25 / 0.5 / 1.0 / 2.0 logits of ability; the numbers below are that intent at
+ * `DISPLAY_SCALE` points per logit. They were once 100 / 200 / 400 / 800, which was the same
+ * intent back when the scale was 400 points per logit, and they stayed put through the rescale
+ * to 1250, at which point every band quietly reached a quarter as far in ability terms as it
+ * was designed to. A display rescale has to move these with it, and `matchmaking.test.ts` pins
+ * the logit intent so that a schedule which has fallen out of step fails the suite.
+ *
+ * 313 is 312.5 rounded up: a quarter logit is not a whole number of display points, and a band
+ * is stated to players as a round number of points rather than as a fraction. Half a point is
+ * 0.0004 logits, well inside the noise of any ability estimate.
  */
-// TODO(rating-scale): these are widths in DISPLAY points, chosen when the
-// scale was 400 points per logit, where they meant 0.25 / 0.5 / 1.0 / 2.0
-// logits. The scale is now 1250, so they currently mean 0.08 / 0.16 / 0.32 /
-// 0.64 logits: every band reaches a QUARTER as far in ability terms as it was
-// designed to. Matchmaking still works, and it searches a narrower pool than
-// intended. Fixing it means moving these to 313 / 625 / 1250 / 2500 AND
-// updating the candidate-distance fixtures throughout matchmaking.test.ts,
-// which is a coherent change worth doing on its own rather than riding along
-// with a display rescale.
-export const BAND_STEPS_DISPLAY: readonly number[] = [100, 200, 400, 800]
+export const BAND_STEPS_DISPLAY: readonly number[] = [313, 625, 1250, 2500]
 
 /** The widest band we will ever accept. Beyond this we seat a bot instead. */
 export const MAX_BAND_DISPLAY = BAND_STEPS_DISPLAY[BAND_STEPS_DISPLAY.length - 1]!
@@ -287,7 +288,7 @@ export type ChooseOpponentOptions = {
  *      the first band containing a human performance. Within a band, prefer the closest rating
  *      and break ties toward the OLDEST performance, so the pool circulates and every stored
  *      answer eventually earns its author a result instead of the same few being replayed.
- *   3. **Cap the widening.** At `MAX_BAND_DISPLAY` (800 display points = 2 logits) we stop.
+ *   3. **Cap the widening.** At `MAX_BAND_DISPLAY` (2500 display points = 2 logits) we stop.
  *      We do NOT fall back to "closest human at any distance": at a 2-logit gap the expected
  *      score is ~0.88, the dynamic-K update is nearly zero, the loser learns nothing from a
  *      performance they cannot yet parse, and we have burned a judge call to move no rating.
@@ -310,6 +311,14 @@ export type ChooseOpponentOptions = {
  * scale the same construction differs in the last bits, the tie-break stopped
  * firing, and the pool silently stopped circulating: the same opponent would be
  * served over and over while a stale one was never seen.
+ *
+ * The band membership test below leans on the same tolerance for the same
+ * reason. "Within 313 points" is meant to include a player at exactly 313, and
+ * whether `|theta - theta| <= width` comes out true for a rating built by
+ * dividing 313 by the display scale is decided by the last bit of a double: at
+ * the previous constants it happened to hold at 100 points and to fail at 200.
+ * A band edge is a product promise, so it holds by tolerance rather than by
+ * which numbers the schedule currently uses.
  *
  * 1e-9 logits is far below any difference in ability a person could have, and
  * far above float noise.
@@ -338,7 +347,9 @@ export function chooseOpponent(
   for (let step = 0; step < bands.length; step++) {
     const widthDisplay = bands[step]!
     const width = bandWidthLogits(widthDisplay)
-    const inBand = humans.filter((c) => Math.abs(c.authorTheta - learner.theta) <= width)
+    const inBand = humans.filter(
+      (c) => Math.abs(c.authorTheta - learner.theta) <= width + DISTANCE_EPSILON,
+    )
     if (inBand.length === 0) continue
 
     inBand.sort((a, b) => {
