@@ -109,7 +109,13 @@ create table public.user_worlds (
 
 -- ---------------------------------------------------------------------------
 -- user_ratings — user x world x ladder. Dynamic-K Elo on the LOGIT scale (02-ml-and-naming,
--- 03-learning-libs 7.3); the 900-2100 display number is derived, never stored twice by hand.
+-- 03-learning-libs 7.3); the display number is derived, never stored twice by hand.
+--
+-- (COMMENT CORRECTED. This header said "the 900-2100 display number", and the two generated
+-- columns below really did run as `900 + 400 * theta`. Both columns were dropped and redefined
+-- as `1000 + 1250 * theta` by `20260815094459_rating_scale_10k.sql`, so the formulas in this
+-- file are history rather than the current schema. The prose here now names the scale by its
+-- constants instead of by two numbers, which is the form that survives the next rescale.)
 -- ---------------------------------------------------------------------------
 create table public.user_ratings (
   user_id         uuid     not null references auth.users (id) on delete cascade,
@@ -120,8 +126,11 @@ create table public.user_ratings (
   -- DISPLAY SCALE: must stay identical to DISPLAY_INIT / DISPLAY_SCALE in
   -- src/lib/engine/elo.ts. Postgres cannot call TypeScript, so the formula is
   -- written twice; src/lib/engine/display-scale.test.ts pins the constants so a
-  -- one-sided edit fails the suite. 900 is the floor of the Treeline altitude
-  -- band: a fresh account must start at the bottom of the visible climb.
+  -- one-sided edit fails the suite. DISPLAY_INIT is the floor of the Treeline
+  -- altitude band: a fresh account must start at the bottom of the visible climb.
+  -- (SUPERSEDED: both generated columns were redefined as `1000 + 1250 * theta`
+  -- by `20260815094459_rating_scale_10k.sql`. Read that file for what the table
+  -- carries; the expressions here are what ran on this date.)
   rating          double precision generated always as (900 + 400 * theta) stored,
   games_played    integer  not null default 0 check (games_played >= 0),
   -- uncertainty = the dynamic-K step size K(n) = a / (1 + b*n), with a = 1.0, b = 0.05.
@@ -140,6 +149,8 @@ create table public.user_ratings (
 
 comment on table public.user_ratings is
   'Independent per world per ladder — the retention mechanism, not a feature. Written by the engine (service role) only: there is deliberately no client INSERT/UPDATE policy.';
+-- (RESTATED by `20260815131207_bot_ratings_10k.sql` to name the constants rather than one
+-- scale's arithmetic. The statement below has already run, so it stays as it was written.)
 comment on column public.user_ratings.theta is
   'Logit-scale ability. rating = 900 + 400*theta is a presentation convention; bands compare against rating.';
 comment on column public.user_ratings.uncertainty is

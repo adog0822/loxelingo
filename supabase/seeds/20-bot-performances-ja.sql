@@ -104,13 +104,16 @@
 -- `display_rating` is therefore READ from `public.bots`, not typed here: it is the authored
 -- number `botDisplayRating` returns, and `nearestBotPerformance` picks the bot whose display
 -- rating is closest to the learner's, so a second copy of it in this file would be a second
--- place for it to be wrong. 900 is the floor of the visible climb (a new account starts at
--- exactly DISPLAY_INIT = 900), so Satoru at 940 is barely above a beginner and Tetsuya at 1820
+-- place for it to be wrong. A new account starts at exactly DISPLAY_INIT, the floor of the
+-- visible climb, so Satoru at theta 0.10 is barely above a beginner and Tetsuya at theta 2.30
 -- is near the top of the ladder.
 --
 -- theta_before = fromDisplayScale(rating) = (rating - DISPLAY_INIT) / DISPLAY_SCALE
---              = (rating - 900) / 400
--- computed here rather than typed, so it cannot drift from elo.ts.
+--              = (rating - 1000) / 1250
+-- computed here rather than typed, so it cannot drift from the roster. The two constants ARE
+-- typed, because SQL cannot read elo.ts, and they have moved once: restate them here in the
+-- same commit as any display rescale or every seeded bot seat lands on the wrong rung.
+-- `src/lib/engine/bot-rungs.test.ts` reads this file and fails if they disagree with elo.ts.
 --
 -- ELAPSED_MS. Derived, not sprinkled: `plan_ms + ms_per_char * char_length(content)`.
 --   * `plan_ms` is time spent deciding WHAT to write before typing anything. It rises with
@@ -180,7 +183,7 @@ seats as (
     r.seq,
     r.plan_ms,
     r.ms_per_char,
-    (r.display_rating - 900)::double precision / 400.0 as theta_before,
+    (r.display_rating - 1000)::double precision / 1250.0 as theta_before,
     -- Authored, never `now()`: `chooseOpponent` breaks ties on submission age, so a
     -- clock-derived timestamp would change which bot a learner meets depending on when the
     -- seed last ran. Ranked on external_id, not on `items.id`, so re-seeding content cannot
@@ -246,7 +249,7 @@ seats as (
     r.seq,
     r.plan_ms,
     r.ms_per_char,
-    (r.display_rating - 900)::double precision / 400.0 as theta_before,
+    (r.display_rating - 1000)::double precision / 1250.0 as theta_before,
     -- Authored, never `now()`: `chooseOpponent` breaks ties on submission age, so a
     -- clock-derived timestamp would change which bot a learner meets depending on when the
     -- seed last ran. Ranked on external_id, not on `items.id`, so re-seeding content cannot
@@ -284,32 +287,34 @@ on conflict (match_id, seat) do update set
 --
 -- The gradient belongs to the RUNG, not to the name. Each paragraph below describes an
 -- archetype — the same five archetypes the English cast fills with different characters — which
--- is why a feature can speak of "the 1340" in any world and why re-attributing these answers
--- from Mira to Haruki changed nothing about what they demonstrate:
+-- is why a feature can speak of "the precise_literary" in any world and why re-attributing
+-- these answers from Mira to Haruki changed nothing about what they demonstrate. The rungs are
+-- named by archetype and by theta below, never by display rating, because the display rating is
+-- a presentation of theta and has already been restated once underneath these paragraphs:
 --
---   Satoru 940      earnest_beginner - task_completion and register. Communicates the bare
+--   Satoru   theta 0.10  earnest_beginner - task_completion and register. Communicates the bare
 --                   proposition and stops. Plain forms regardless of audience, particles
 --                   dropped, no aspect and no nuance. The errors are real L2 errors a beginner
 --                   makes (あなたの to a neighbour, 食べません for 食べられません, the て-form
 --                   where たら is required), never nonsense: it must read as comprehensible but
 --                   blunt.
---   Rin 1120        casual_peer - accuracy is basically fine and the politeness level is
+--   Rin      theta 0.55  casual_peer - accuracy is basically fine and the politeness level is
 --                   CHOSEN, then not sustained (だから inside a です/ます request to a teacher,
 --                   ごめんね closing a polite note) or chosen for the wrong audience entirely
 --                   (ます to a close friend on a PLAIN FORM item). Vocabulary is generic.
 --                   Crucially Rin is the bot that misses the REQUIRED FORM most often - active
 --                   voice where the item wants the passive, plain past where it wants
 --                   〜ていました, four sentences where it wants one sequence. The rubric caps
---                   task_completion at 4 for exactly that, which is what keeps a 1120 from
---                   beating a 1340.
---   Haruki 1340     precise_literary - register consistent, set phrases correct, communicative
+--                   task_completion at 4 for exactly that, which is what keeps the casual_peer
+--                   rung from beating the precise_literary one.
+--   Haruki   theta 1.10  precise_literary - register consistent, set phrases correct, communicative
 --                   goal reached, every stated constraint honoured. Reads like a competent
 --                   non-native: over-explicit 私は, から where ので is softer, 〜たいです to a
 --                   manager, the same construction repeated where range would want variation.
---   Kaori 1580      warm_guide - idiomatic, correct aspect and modality, and uses the specific
+--   Kaori    theta 1.70  warm_guide - idiomatic, correct aspect and modality, and uses the specific
 --                   grammar the item is really testing (置いてあります, 入れてあります,
 --                   〜てもらえない, 〜みたい, 早退, 通り過ぎる).
---   Tetsuya 1820    master - what a native actually writes: concise, socially calibrated, and
+--   Tetsuya  theta 2.30  master - what a native actually writes: concise, socially calibrated, and
 --                   doing the pragmatic work the brief asks for rather than only the
 --                   grammatical work (opening with おいしそうですね before declining;
 --                   お手数ですが / ご配慮いただけると助かります in a note you have to live
@@ -354,7 +359,7 @@ seats as (
     r.seq,
     r.plan_ms,
     r.ms_per_char,
-    (r.display_rating - 900)::double precision / 400.0 as theta_before,
+    (r.display_rating - 1000)::double precision / 1250.0 as theta_before,
     -- Authored, never `now()`: `chooseOpponent` breaks ties on submission age, so a
     -- clock-derived timestamp would change which bot a learner meets depending on when the
     -- seed last ran. Ranked on external_id, not on `items.id`, so re-seeding content cannot
@@ -402,7 +407,8 @@ answers (item_key, bot_slug, content) as (values
 -- --- ja-duel-decline-food · <40 · POLITE ----------------------------------------
 -- The pragmatic core: 食べません refuses by WILL and is the socially damaging answer;
 -- 食べられません refuses by ABILITY and protects her. Tetsuya adds the おいしそうですね that
--- does the actual face-saving, which is the whole difference between 1580 and 1820 here.
+-- does the actual face-saving, which is the whole difference between the warm_guide and
+-- master rungs here.
 ('ja-duel-decline-food','satoru',  'すみません。私は卵だめです。食べません。'),
 ('ja-duel-decline-food','rin',     'ごめんなさい。卵が食べられません。アレルギーがあります。'),
 ('ja-duel-decline-food','haruki',  'すみません。私は卵アレルギーですから、食べることができません。'),
@@ -526,7 +532,7 @@ answers (item_key, bot_slug, content) as (values
 
 -- --- ja-duel-decline-karaoke · <40 · PLAIN · 〜なければならない / 〜なきゃ ---------
 -- The obligation must be the reason. Haruki's なければならない is correct and bookish for
--- speech among friends; なきゃ is what is actually said, which is the 1580/1820 rung.
+-- speech among friends; なきゃ is what is actually said, which is the warm_guide/master rung.
 ('ja-duel-decline-karaoke','satoru',  'ごめん、行かない。明日テストある。勉強する。'),
 ('ja-duel-decline-karaoke','rin',     'ごめんなさい。明日試験があります。勉強しなければなりません。'),
 ('ja-duel-decline-karaoke','haruki',  'ごめん、行けない。明日試験があるから、勉強しなければならない。'),

@@ -17,24 +17,32 @@
 -- -----------------------------------------------------------------------------
 -- Five rungs, five archetypes, one stable machine-readable id per rung SHARED ACROSS WORLDS:
 --
---   earnest_beginner   940   says the thing and stops
---   casual_peer       1120   fluent-sounding, misses the required form
---   precise_literary  1340   correct, not idiomatic
---   warm_guide        1580   idiomatic, gently corrective
---   master            1820   does the pragmatic work, cultural depth
+--   earnest_beginner   theta 0.10   says the thing and stops
+--   casual_peer        theta 0.55   fluent-sounding, misses the required form
+--   precise_literary   theta 1.10   correct, not idiomatic
+--   warm_guide         theta 1.70   idiomatic, gently corrective
+--   master             theta 2.30   does the pragmatic work, cultural depth
+--
+-- (COMMENT CORRECTED. This block, and the paragraph below it, listed the rungs by their
+-- display ratings on the scale of the day: 940 / 1120 / 1340 / 1580 / 1820. The `values` list
+-- further down still inserts those numbers because it has already run and an applied migration
+-- is history, but they are no longer what the rows hold:
+-- `20260815131207_bot_ratings_10k.sql` restated them as 1125 / 1688 / 2375 / 3125 / 3875 after
+-- `20260815094459_rating_scale_10k.sql` moved the display scale underneath them. The thetas
+-- above never moved, which is why they are what this comment names now.)
 --
 -- The ARCHETYPE is what makes the ladder legible across worlds: `archetype` is what code
--- reasons about ("the 1580 rung"), so a feature written against the Japanese cast works
+-- reasons about ("the warm_guide rung"), so a feature written against the Japanese cast works
 -- unchanged against the English one and against a Korean cast that does not exist yet. The
 -- SKILL PROFILE the rubric judges is a property of the rung. The NAME and the VOICE are
 -- properties of the world. Hence `archetype` and `display_rating` are shared by rung, while
 -- `name` / `self_description` / `avatar_path` are local.
 --
--- `display_rating` is on the 900-2100 DISPLAY scale (elo.ts `DISPLAY_INIT` = 900,
--- `DISPLAY_SCALE` = 400), not in logits, because a designer places a bot in a band and
--- `nearestBotPerformance` compares display ratings so the authored number means what was
--- typed. It is shared by rung because a rung IS a difficulty: 1340 must be the same climb in
--- every world or the ladder stops being one ladder.
+-- `display_rating` is a DISPLAY number (`DISPLAY_INIT + DISPLAY_SCALE * theta` in elo.ts), not
+-- a logit, because a designer places a bot in a band and `nearestBotPerformance` compares
+-- display ratings so the authored number means what was typed. It is shared by rung because a
+-- rung IS a difficulty: precise_literary must be the same climb in every world or the ladder
+-- stops being one ladder.
 --
 -- -----------------------------------------------------------------------------
 -- SELF_DESCRIPTION: INFERABLE, NEVER DECLARATIVE
@@ -83,8 +91,11 @@ create table public.bots (
                    )),
 
   name             text        not null check (char_length(name) between 1 and 60),
-  -- DISPLAY scale (900 = a brand-new account). Bounded to a plausible climb so a typo that
-  -- would park a bot outside every band is rejected rather than seated.
+  -- DISPLAY scale (a brand-new account sits at DISPLAY_INIT). Bounded so a typo that would park
+  -- a bot outside every band is rejected rather than seated.
+  -- (COMMENT CORRECTED: 400-3000 was sized for the old scale's theta -1.25 to 5.25, and
+  -- `20260815131207_bot_ratings_10k.sql` replaced it with the 0-10,000 display range itself.
+  -- The bound below is what ran, not what the table carries today.)
   display_rating   integer     not null check (display_rating between 400 and 3000),
 
   -- First person, ONE line, shows the archetype without naming it. See the header.
@@ -96,8 +107,8 @@ create table public.bots (
   created_at       timestamptz not null default now(),
 
   constraint bots_slug_format check (slug ~ '^[a-z0-9-]+$'),
-  -- One bot per rung per world. This is what makes "the 1580 of this world" a well-defined
-  -- lookup, and what stops a world from shipping four rungs or two 1340s.
+  -- One bot per rung per world. This is what makes "the warm_guide of this world" a well-defined
+  -- lookup, and what stops a world from shipping four rungs or two precise_literarys.
   constraint bots_one_per_rung_per_world unique (world_slug, archetype),
   constraint bots_sort_order_unique_per_world unique (world_slug, sort_order),
   -- A single line. A paragraph here is a paragraph in a card with room for one line.
@@ -117,6 +128,9 @@ comment on table public.bots is
   'The per-world bot cast. Five rungs per world; `archetype` is the rung and is shared across worlds, `name`/`self_description`/`avatar_path` are local to the world. Replaces BOT_ROSTER in src/lib/match/matchmaking.ts.';
 comment on column public.bots.slug is
   'Globally unique. This is the value stored in match_participants.bot_slug, which carries no world of its own.';
+-- (Both column comments below name rungs by their old display ratings and are RESTATED by
+-- `20260815131207_bot_ratings_10k.sql`. They are executable statements that have already run,
+-- so they stay as they were written; the later migration is where the current text lives.)
 comment on column public.bots.archetype is
   'The rung, machine-readable and shared across worlds, so code can say "the 1580" without knowing the cast.';
 comment on column public.bots.display_rating is
@@ -214,7 +228,7 @@ begin
   end if;
 
   -- A rung IS a difficulty: the same archetype must mean the same climb in every world, or
-  -- "the 1340" stops naming one thing.
+  -- "the precise_literary" stops naming one thing.
   select count(*) into n_ratings
   from (
     select archetype from public.bots group by archetype having count(distinct display_rating) > 1

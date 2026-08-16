@@ -26,7 +26,7 @@ const LADDERS: readonly LadderId[] = ['duel', 'forge', 'recall']
 export interface LadderStanding {
   readonly ladder: LadderId
   /**
-   * The 900-2100 display rating, or `null` when this ladder has never been
+   * The 0-10,000 display rating, or `null` when this ladder has never been
    * played. The absence of a number is the state, and it is rendered as an
    * absence rather than as a badge reading "Unrated".
    */

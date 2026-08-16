@@ -67,7 +67,9 @@ That was the only edit needed to make the schema run.
 The four things this file previously listed as unverifiable, now confirmed against the catalog:
 
 - **`generated always as (...) stored` — all accepted.** There are six, not four:
-  `user_ratings.rating` and `.peak_rating` (`900 + 400 * theta`), `judgments.rubric_hash`
+  `user_ratings.rating` and `.peak_rating` (`1000 + 1250 * theta` since
+  `20260815094459_rating_scale_10k`; `900 + 400 * theta` on the run recorded here),
+  `judgments.rubric_hash`
   (`md5(rubric_text)`), `judgments.position_disagreement` (`is distinct from`),
   `match_participants.rating_delta`, `rivalries.matches_played` (`wins_a + wins_b + draws`).
   Every expression is immutable enough for Postgres to store it.
@@ -90,8 +92,8 @@ rows 7a–7h below.
 
 | # | Invariant | Result |
 |---|---|---|
-| 1 | `user_ratings.rating` = `900 + 400 * theta`; a fresh row (theta 0) yields exactly **900** | pass |
-| 1b | theta 1.25 yields 1400; `altitude_band(900)` = `Treeline` | pass |
+| 1 | `user_ratings.rating` = `DISPLAY_INIT + DISPLAY_SCALE * theta`; a fresh row (theta 0) yields exactly **DISPLAY_INIT** | pass — read `900` on the run recorded here, `1000` after the rescale |
+| 1b | theta 1.25 yields `DISPLAY_INIT + 1.25 * DISPLAY_SCALE`; `altitude_band(DISPLAY_INIT)` = `Treeline` | pass — 1400 then, 2562.5 now |
 | 1c | `peak_theta` cannot be lowered | pass — *"peak_theta is a permanent high-water mark and cannot decrease"* |
 | 2a | `league_members.points` cannot decrease | pass — *"league points are monotonic: leagues are promotion-only"* |
 | 2b | points may increase | pass |
@@ -228,15 +230,24 @@ still reads them. This is deliberate: `items.answer` holds the answer, `daily_pu
 spoiler, `item_stats.beta` is an internal calibration signal, and the gold label set is the judge's
 answer key. Prompts reach the client only through server code that strips the answer.
 
-**3. Ratings are stored as logits; the 900–2100 number is generated.**
+**3. Ratings are stored as logits; the 0–10,000 number is generated.**
 `user_ratings.theta` is the dynamic-K Elo ability on the logit scale (which is what the engine, the
 knowledge tracer and Bradley-Terry all compose on), and `rating` is a stored generated column,
-`900 + 400 * theta` — 900 because that is the floor of the Treeline band, so a fresh account starts
-at the bottom of the visible climb rather than at the payoff. The constant is pinned on both sides
-by `src/lib/engine/display-scale.test.ts`, which reads this migration; verified 900 at theta 0.
-There is exactly one source of truth. `peak_theta` is protected by a trigger
-that refuses to lower it, because "you can be below your own line, you cannot lose the line" is a
-product promise, not a UI detail.
+`1000 + 1250 * theta` — 1000 because that is the floor of the Treeline band, so a fresh account
+starts at the bottom of the visible climb rather than at the payoff. The constants are pinned on
+both sides by `src/lib/engine/display-scale.test.ts`, which reads
+`20260815094459_rating_scale_10k.sql`. There is exactly one source of truth. `peak_theta` is
+protected by a trigger that refuses to lower it, because "you can be below your own line, you
+cannot lose the line" is a product promise, not a UI detail.
+
+Anything else that carries a display number has to move with those two constants, and the roster
+is the case that proves it: `public.bots.display_rating` was authored on the previous scale and
+stayed there through the rescale, which squeezed the five rungs from a designed 2.2 logits into
+0.7 and put the strongest opponent in the game level with a player's first band.
+`20260815131207_bot_ratings_10k.sql` restated the rungs and `src/lib/engine/bot-rungs.test.ts`
+now asserts them in LOGITS, so the next rescale that skips a table fails the suite. The
+conversions hand-written in `supabase/seeds/*-bot-performances-*.sql` are covered by the same
+test.
 
 **4. Table names `card` / `review_log` are singular, unlike everything else.**
 They are taken from `03-learning-libs.md` §4.7 verbatim, and that section is the one place where the

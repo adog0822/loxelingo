@@ -155,10 +155,16 @@ export function bandWidthLogits(displayPoints: number): number {
  * `MatchmakingQueries.fetchBotRoster` reads them.
  *
  * WHAT IS SHARED IS THE RUNG. `archetype` is a stable machine-readable id for one of the five
- * rungs, identical in every world, so code can reason about "the 1580" without knowing the
- * cast. `displayRating` belongs to the rung too, and is on the 900-2100 display scale so it is
- * directly comparable to what the player sees and a designer can place a bot in a band without
- * touching logits. `name` / `selfDescription` / `avatarPath` are local to the world.
+ * rungs, identical in every world, so code can reason about "the warm_guide" without knowing
+ * the cast. `displayRating` belongs to the rung too, and is on the 0-10,000 display scale so it
+ * is directly comparable to what the player sees and a designer can place a bot in a band
+ * without touching logits. `name` / `selfDescription` / `avatarPath` are local to the world.
+ *
+ * Name the rung by ARCHETYPE, never by its current number. The five ratings were typed on an
+ * older display scale and stayed put when the scale moved, which squeezed the whole cast into
+ * under a third of its designed range; the prose that called them "the 1580" is part of why
+ * that survived review. `supabase/migrations/20260815131207_bot_ratings_10k.sql` restated them
+ * and `src/lib/engine/bot-rungs.test.ts` pins them to the scale in logits.
  */
 export type BotArchetype =
   | 'earnest_beginner'

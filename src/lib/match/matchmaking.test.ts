@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { DISPLAY_INIT, DISPLAY_SCALE } from '@/lib/engine/elo'
+import { DISPLAY_INIT, DISPLAY_SCALE, toDisplayScale } from '@/lib/engine/elo'
 import {
   BAND_STEPS_DISPLAY,
   bandWidthLogits,
@@ -37,35 +37,59 @@ const T = (n: number) => new Date(Date.UTC(2026, 0, 1 + n)).toISOString()
  * is per-world. That is exactly what these fixtures prove — the policy functions take a roster
  * as a plain value, so every test below runs with no database, and a Japanese test roster is a
  * different five characters from an English one.
+ *
+ * The ratings mirror `supabase/migrations/20260815131207_bot_ratings_10k.sql`, which is where
+ * the rungs are authored and where `src/lib/engine/bot-rungs.test.ts` pins them to the display
+ * scale. Nothing below asserts a rating literal, so a rescale needs nothing restated here at
+ * all; the tests are written against band widths and archetypes instead.
  */
-const def = (
-  slug: string,
-  name: string,
-  displayRating: number,
-  archetype: BotDefinition['archetype'],
-): BotDefinition => ({
+
+/**
+ * THE FIVE RUNGS, IN LOGITS — converted, never typed as display points.
+ *
+ * A rung is a statement about ABILITY. Display points are only how that statement is printed,
+ * so a fixture that types the printed form is a fixture that keeps passing after the printing
+ * changes. That is not hypothetical here: these were 940 / 1120 / 1340 / 1580 / 1820 under
+ * `900 + 400 * theta`, the scale moved to `1000 + 1250 * theta`, and the numbers stayed put —
+ * collapsing a cast designed to span 2.2 logits into 0.7, parking every rung inside the first
+ * band of a brand-new account, and leaving this file green throughout. It is the same failure
+ * `BAND_STEPS_DISPLAY` had, and it is fixed the same way: state the intent, derive the number.
+ */
+const RUNG_THETA: Readonly<Record<BotDefinition['archetype'], number>> = {
+  earnest_beginner: 0.1,
+  casual_peer: 0.55,
+  precise_literary: 1.1,
+  warm_guide: 1.7,
+  master: 2.3,
+}
+
+/** A rung's display rating, rounded the way the integer `bots.display_rating` column rounds it. */
+const rung = (archetype: BotDefinition['archetype']): number =>
+  Math.round(toDisplayScale(RUNG_THETA[archetype]))
+
+const def = (slug: string, name: string, archetype: BotDefinition['archetype']): BotDefinition => ({
   slug,
   name,
-  displayRating,
+  displayRating: rung(archetype),
   archetype,
   selfDescription: `${name} says one line about themselves.`,
   avatarPath: null,
 })
 
 const JA_ROSTER: BotRoster = botRoster('ja', [
-  def('satoru', 'Satoru', 940, 'earnest_beginner'),
-  def('rin', 'Rin', 1120, 'casual_peer'),
-  def('haruki', 'Haruki', 1340, 'precise_literary'),
-  def('kaori', 'Kaori', 1580, 'warm_guide'),
-  def('tetsuya', 'Tetsuya', 1820, 'master'),
+  def('satoru', 'Satoru', 'earnest_beginner'),
+  def('rin', 'Rin', 'casual_peer'),
+  def('haruki', 'Haruki', 'precise_literary'),
+  def('kaori', 'Kaori', 'warm_guide'),
+  def('tetsuya', 'Tetsuya', 'master'),
 ])
 
 const EN_ROSTER: BotRoster = botRoster('en', [
-  def('wren-the-copyist', 'Wren, the Copyist', 940, 'earnest_beginner'),
-  def('orrin-the-ferryman', 'Orrin, the Ferryman', 1120, 'casual_peer'),
-  def('mira-the-cartographer', 'Mira, the Cartographer', 1340, 'precise_literary'),
-  def('kestrel-the-archivist', 'Kestrel, the Archivist', 1580, 'warm_guide'),
-  def('sable-the-lantern-keeper', 'Sable, the Lantern Keeper', 1820, 'master'),
+  def('wren-the-copyist', 'Wren, the Copyist', 'earnest_beginner'),
+  def('orrin-the-ferryman', 'Orrin, the Ferryman', 'casual_peer'),
+  def('mira-the-cartographer', 'Mira, the Cartographer', 'precise_literary'),
+  def('kestrel-the-archivist', 'Kestrel, the Archivist', 'warm_guide'),
+  def('sable-the-lantern-keeper', 'Sable, the Lantern Keeper', 'master'),
 ])
 
 /** Every test that does not care about the cast uses the Japanese one. */
@@ -179,7 +203,7 @@ describe('chooseOpponent — self-match exclusion', () => {
       [
         human({ submissionId: 's1', authorUserId: 'me' }),
         human({ submissionId: 's2', authorUserId: 'me', authorTheta: 0.05 }),
-        bot('rin', thetaFor(1120)),
+        bot('rin', thetaFor(rung('casual_peer'))),
       ],
       withJaRoster(),
     )
@@ -298,7 +322,7 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
       me,
       [
         human({ submissionId: 'miles-away', authorTheta: above(PAST_THE_CAP) }),
-        bot('kaori', thetaFor(1580)),
+        bot('kaori', thetaFor(rung('warm_guide'))),
       ],
       withJaRoster(),
     )
@@ -310,7 +334,7 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
   })
 
   it('seats a bot when the pool is empty, and says so', () => {
-    const d = chooseOpponent(me, [bot('haruki', thetaFor(1340))], withJaRoster())
+    const d = chooseOpponent(me, [bot('haruki', thetaFor(rung('precise_literary')))], withJaRoster())
     expect(d.kind).toBe('bot')
     if (d.kind === 'bot') expect(d.reason).toBe('pool_empty')
   })
@@ -334,7 +358,7 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
       me,
       [
         human({ submissionId: 'edge', authorTheta: above(MAX_BAND_DISPLAY) }), // exactly at the cap
-        bot('kaori', thetaFor(1580)),
+        bot('kaori', thetaFor(rung('warm_guide'))),
       ],
       withJaRoster(),
     )
@@ -343,10 +367,14 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
   })
 
   it('picks the roster bot nearest the learner on the DISPLAY scale', () => {
+    // Positioned relative to the rung rather than at a typed rating: the ratings themselves
+    // have already moved once with the display scale, and "just above Kaori" is what the test
+    // is about either way.
+    const kaori = JA_ROSTER.byArchetype('warm_guide')!
     const bots = JA_ROSTER.bots.map((b) => bot(b.slug, thetaFor(b.displayRating)))
-    const chosen = nearestBotPerformance(JA_ROSTER, thetaFor(1600), bots)
+    const chosen = nearestBotPerformance(JA_ROSTER, thetaFor(kaori.displayRating + 20), bots)
     expect(chosen.botSlug).toBe('kaori')
-    expect(botDisplayRating(JA_ROSTER, chosen)).toBe(1580)
+    expect(botDisplayRating(JA_ROSTER, chosen)).toBe(kaori.displayRating)
   })
 
   it('every roster bot is labeled with a slug and a name, and resolves by slug', () => {
@@ -363,7 +391,7 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
 describe('the roster is per-world content, not a constant', () => {
   it('the same rung is a different character in each world', () => {
     // The whole point of the refactor: `archetype` is the rung and is shared, so a feature can
-    // ask for "the 1580" in any world; the NAME is local and must differ.
+    // ask for "the warm_guide" in any world; the NAME is local and must differ.
     for (const archetype of [
       'earnest_beginner',
       'casual_peer',
@@ -389,11 +417,16 @@ describe('the roster is per-world content, not a constant', () => {
     expect(ja.kind).toBe('bot')
     expect(en.kind).toBe('bot')
     if (ja.kind === 'bot' && en.kind === 'bot') {
-      // Both learners are at 1500, so both meet the warm_guide rung — under different names.
-      expect(ja.bot.archetype).toBe('warm_guide')
-      expect(en.bot.archetype).toBe('warm_guide')
-      expect(ja.bot.name).toBe('Kaori')
-      expect(en.bot.name).toBe('Kestrel, the Archivist')
+      // Both learners sit at LEARNER_DISPLAY, so both meet the SAME rung under different names —
+      // which is the whole claim. Which rung that is depends on where the learner sits against
+      // the cast, and it is `casual_peer`: 1500 is mid-Treeline and the casual_peer rung is the
+      // nearest one to it. It used to be `warm_guide` only because every rung was crushed into a
+      // 0.7-logit huddle around a new account, so a mid-ladder learner was near-equidistant from
+      // all five. A learner now meeting a rung close to their own altitude is the fix working.
+      expect(ja.bot.archetype).toBe('casual_peer')
+      expect(en.bot.archetype).toBe('casual_peer')
+      expect(ja.bot.name).toBe('Rin')
+      expect(en.bot.name).toBe('Orrin, the Ferryman')
     }
   })
 
@@ -401,13 +434,13 @@ describe('the roster is per-world content, not a constant', () => {
     // The bug this guards: a Japanese pool still carrying the old shared English slugs. It
     // used to degrade silently — `botDisplayRating` derived a rating from the seeded theta and
     // the match looked entirely normal, with an English character answering in Japanese.
-    const stray = bot('wren-the-copyist', thetaFor(940))
+    const stray = bot('wren-the-copyist', thetaFor(rung('earnest_beginner')))
     expect(botBySlug(JA_ROSTER, 'wren-the-copyist')).toBeUndefined()
     expect(() => botDisplayRating(JA_ROSTER, stray)).toThrow(MatchmakingError)
     expect(() => botDisplayRating(JA_ROSTER, stray)).toThrow(/not in the roster for world 'ja'/)
     expect(() => chooseOpponent(me, [stray], { roster: JA_ROSTER })).toThrow(MatchmakingError)
     // Same performance, correct world: seated without complaint.
-    expect(botDisplayRating(EN_ROSTER, stray)).toBe(940)
+    expect(botDisplayRating(EN_ROSTER, stray)).toBe(rung('earnest_beginner'))
   })
 
   it('a world with no authored cast still matches humans, and refuses to invent a bot', () => {
@@ -423,7 +456,7 @@ describe('the roster is per-world content, not a constant', () => {
       reason: 'no_opponent_available',
     })
     // ...but a bot performance with no cast behind it is a seeding error, not a fallback.
-    expect(() => chooseOpponent(me, [bot('satoru', thetaFor(940))], { roster })).toThrow(
+    expect(() => chooseOpponent(me, [bot('satoru', thetaFor(rung('earnest_beginner')))], { roster })).toThrow(
       MatchmakingError,
     )
   })
@@ -626,7 +659,7 @@ describe('findGhostMatch', () => {
   })
 
   it('creates an UNRATED match when the seat goes to a bot', async () => {
-    const q = fakeQueries([bot('haruki', thetaFor(1340))])
+    const q = fakeQueries([bot('haruki', thetaFor(rung('precise_literary')))])
     const res = await findGhostMatch(input, { queries: q, newMatchId: () => 'm-bot' })
     expect(res).toMatchObject({ ok: true, isRated: false })
     if (res.ok && !res.reused) expect(res.opponent.kind).toBe('bot')
@@ -635,7 +668,7 @@ describe('findGhostMatch', () => {
   })
 
   it('fetches the roster for THE MATCH’S WORLD and seats that world’s cast', async () => {
-    const q = fakeQueries([bot('wren-the-copyist', thetaFor(940))], { roster: EN_ROSTER })
+    const q = fakeQueries([bot('wren-the-copyist', thetaFor(rung('earnest_beginner')))], { roster: EN_ROSTER })
     const res = await findGhostMatch({ ...input, worldSlug: 'en' }, {
       queries: q,
       newMatchId: () => 'm-en',

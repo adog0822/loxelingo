@@ -63,9 +63,13 @@ export interface Band {
 }
 
 /**
- * Band boundaries at 900 / 1100 / 1300 / 1550 / 1800 / 2100: gaps of
- * 200, 200, 250, 250, 300. Deliberately tight early, because first
+ * Band boundaries at 1000 / 1800 / 2800 / 4400 / 6400 / 8800: gaps of
+ * 800, 1000, 1600, 2000, 2400. Deliberately tight early, because first
  * threshold crossings are the highest-leverage retention events.
+ *
+ * (The comment said 900 / 1100 / 1300 / 1550 / 1800 / 2100, the values these
+ * floors carried before the display scale moved to 0-10,000. The floors below
+ * were restated then and the sentence describing them was not.)
  */
 export const BANDS: readonly Band[] = [
   {

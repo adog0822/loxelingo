@@ -12,9 +12,13 @@
 --       expectedCorrect(theta, beta, k) = k>1 ? 1/k + (1-1/k)*sigmoid(theta-beta)
 --                                            : sigmoid(theta-beta)
 --     Reimplemented below in SQL because a seed cannot call TypeScript. The
---     1/k guessing floor matters: without it a 940 bot would look hopeless on
---     4-option items, when in reality it guesses 25% of them right.
---       theta = (display_rating - 900) / 400.0   -- DISPLAY_INIT / DISPLAY_SCALE
+--     1/k guessing floor matters: without it the earnest_beginner rung would
+--     look hopeless on 4-option items, when in reality it guesses 25% right.
+--       theta = (display_rating - 1000) / 1250.0  -- DISPLAY_INIT / DISPLAY_SCALE
+--     Those two constants are elo.ts's and have moved once already. What the
+--     accuracy model depends on is the THETA this yields, so both numbers must
+--     be restated together with the roster ratings or every bot silently lands
+--     on a different rung of the same items.
 --       beta  = items.cold_start_beta
 --
 -- §2  Deterministic, never random()
@@ -51,7 +55,7 @@
 -- §5  ORIGIN MATCHES ---------------------------------------------------------
 with roster as (
   select slug, world_slug, display_rating,
-         ((display_rating - 900) / 400.0)::double precision as theta,
+         ((display_rating - 1000) / 1250.0)::double precision as theta,
          sort_order
   from public.bots
 ),
@@ -90,7 +94,7 @@ on conflict (id) do nothing;
 
 -- §6  BOT SEATS --------------------------------------------------------------
 with roster as (
-  select slug, world_slug, ((display_rating - 900) / 400.0)::double precision as theta
+  select slug, world_slug, ((display_rating - 1000) / 1250.0)::double precision as theta
   from public.bots
 ),
 closed_items as (
@@ -112,7 +116,7 @@ on conflict (match_id, seat) do nothing;
 -- §7  SUBMISSIONS — where correctness is decided ----------------------------
 with roster as (
   select slug, world_slug, display_rating,
-         ((display_rating - 900) / 400.0)::double precision as theta,
+         ((display_rating - 1000) / 1250.0)::double precision as theta,
          sort_order
   from public.bots
 ),
@@ -155,8 +159,8 @@ scored as (
 --
 -- The obvious implementation — roll a hash against p_correct for each item —
 -- was measured and REJECTED. Over 5-25 items the Bernoulli variance swamps the
--- signal: it produced Satoru (940) at 0.800 against Rin (1120) at 0.600, and
--- Sable (1820) below Mira (1340). The expected values were right and the
+-- signal: it produced Satoru (earnest_beginner) at 0.800 against Rin
+-- (casual_peer) at 0.600, and Sable below Mira. The expected values were right and the
 -- realised ladder was inverted, which is worse than useless in a product whose
 -- entire premise is that rank means something.
 --

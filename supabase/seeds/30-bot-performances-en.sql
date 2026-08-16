@@ -202,13 +202,22 @@
 -- §1  THE ROSTER, AND THE THREE NUMBERS THAT ARE NOT ANSWERS
 -- =============================================================================
 --
--- `display_rating` must equal `BOT_ROSTER[].displayRating` in matchmaking.ts. A new account
--- starts at exactly DISPLAY_INIT = 900, so Wren at 940 is barely above a beginner and Sable
--- at 1820 is near the top of the ladder; `nearestBotPerformance` gives that new account Wren.
+-- `display_rating` must equal `public.bots.display_rating` for the same slug — the roster is a
+-- migration table now, not the `BOT_ROSTER` array this line used to name. A new account starts
+-- at exactly DISPLAY_INIT, so Wren at theta 0.10 is barely above a beginner and Sable at theta
+-- 2.30 is near the top of the ladder; `nearestBotPerformance` gives that new account Wren.
 --
 -- theta_before = fromDisplayScale(rating) = (rating - DISPLAY_INIT) / DISPLAY_SCALE
---              = (rating - 900) / 400
--- computed here rather than typed, so it cannot drift from elo.ts.
+--              = (rating - 1000) / 1250
+-- computed here rather than typed, so it cannot drift from the constants.
+--
+-- THE RATINGS BELOW ARE TYPED, WHICH IS A KNOWN HAZARD. The ja pool reads them from
+-- `public.bots` and this one does not, so these three roster CTEs and the two constants above
+-- must all be restated in the same commit as any display rescale. That is exactly what was
+-- missed when the scale moved to 0-10,000 and the cast stayed on 940-1820, collapsing the whole
+-- ladder into under a third of its designed range. `src/lib/engine/bot-rungs.test.ts` reads
+-- this file and fails when the constants here disagree with elo.ts; §4 asserts the ratings
+-- against `public.bots` at seed time.
 --
 -- ELAPSED_MS. Derived, not sprinkled. The ja model, unchanged in shape:
 --     least(time_limit_ms - 1000, plan_ms + ms_per_char * char_length(content))
@@ -267,6 +276,7 @@ declare
   n_rated     integer;
   n_notvoid   integer;
   n_twoseat   integer;
+  n_offrung   integer;
   n_dialect   integer;
   bad         text;
 begin
@@ -285,11 +295,11 @@ insert into public.matches
   (id, world_slug, ladder_slug, season_id, item_id, prompt_snapshot,
    constraint_text, time_limit_ms, status, source, is_rated, created_at, resolved_at)
 with roster (bot_slug, display_rating, seq, plan_ms, ms_per_char) as (values
-  ('wren-the-copyist',          940, 1, 12000, 240),
-  ('orrin-the-ferryman',        1120, 2, 18000, 230),
-  ('mira-the-cartographer',     1340, 3, 22000, 210),
-  ('kestrel-the-archivist',     1580, 4, 26000, 190),
-  ('sable-the-lantern-keeper',  1820, 5, 16000, 140)
+  ('wren-the-copyist',          1125, 1, 12000, 240),
+  ('orrin-the-ferryman',        1688, 2, 18000, 230),
+  ('mira-the-cartographer',     2375, 3, 22000, 210),
+  ('kestrel-the-archivist',     3125, 4, 26000, 190),
+  ('sable-the-lantern-keeper',  3875, 5, 16000, 140)
 ),
 seats as (
   -- The pool is a full cross product: every roster bot answers every duel item. So the seat
@@ -303,7 +313,7 @@ seats as (
     i.time_limit_ms,
     r.bot_slug,
     r.seq,
-    (r.display_rating - 900)::double precision / 400.0 as theta_before,
+    (r.display_rating - 1000)::double precision / 1250.0 as theta_before,
     -- Authored, never `now()`: `chooseOpponent` and `nearestBotPerformance` break ties on
     -- submission age, so a clock-derived timestamp would change which bot a learner meets
     -- depending on when the seed last ran. Ranked on external_id, not on `items.id`, so
@@ -341,17 +351,17 @@ on conflict (id) do update set
 insert into public.match_participants
   (match_id, user_id, seat, is_bot, bot_slug, submitted_at, theta_before, result, created_at)
 with roster (bot_slug, display_rating, seq, plan_ms, ms_per_char) as (values
-  ('wren-the-copyist',          940, 1, 12000, 240),
-  ('orrin-the-ferryman',        1120, 2, 18000, 230),
-  ('mira-the-cartographer',     1340, 3, 22000, 210),
-  ('kestrel-the-archivist',     1580, 4, 26000, 190),
-  ('sable-the-lantern-keeper',  1820, 5, 16000, 140)
+  ('wren-the-copyist',          1125, 1, 12000, 240),
+  ('orrin-the-ferryman',        1688, 2, 18000, 230),
+  ('mira-the-cartographer',     2375, 3, 22000, 210),
+  ('kestrel-the-archivist',     3125, 4, 26000, 190),
+  ('sable-the-lantern-keeper',  3875, 5, 16000, 140)
 ),
 seats as (
   select
     i.external_id,
     r.bot_slug,
-    (r.display_rating - 900)::double precision / 400.0 as theta_before,
+    (r.display_rating - 1000)::double precision / 1250.0 as theta_before,
     timestamptz '2026-07-02 00:00:00+00'
       + make_interval(mins => (dense_rank() over (order by i.external_id) * 5 + r.seq)::integer)
                              as submitted_at
@@ -381,12 +391,12 @@ on conflict (match_id, seat) do update set
 -- `duel@1` rubric (src/lib/judge/rubric.ts), whose axes are task_completion (weighted
 -- highest), accuracy, range and register. The gradient is built on THOSE axes:
 --
---   Wren 940      - task_completion and register. Communicates the bare proposition and
+--   Wren     theta 0.10  - task_completion and register. Communicates the bare proposition and
 --                   stops. Articles missing or wrong, prepositions wrong, tense flattened
 --                   toward the present, no hedge anywhere English requires one, and `Please`
 --                   doing all of the politeness work by itself. Blunt but always
 --                   comprehensible: a native reader gets the message and winces.
---   Orrin 1120    - accuracy is broadly fine and a politeness level is CHOSEN, then not
+--   Orrin    theta 0.55  - accuracy is broadly fine and a politeness level is CHOSEN, then not
 --                   sustained (`Dear Sir or Madam` closing `Thanks a lot!!`; a friendly
 --                   opening turning into `This is not acceptable`). Crucially he is the bot
 --                   that MISSES THE ITEM'S REQUIRED FORM most often: past simple where the
@@ -396,19 +406,19 @@ on conflict (match_id, seat) do update set
 --                   one; three sentences where it says two; an announcement where it says
 --                   ask; a reason where the brief says give none. The rubric caps
 --                   task_completion at 4 for exactly that, and that clause is the whole
---                   reason a 1120 does not beat a 1340.
---   Mira 1340     - every stated constraint honoured, communicative goal reached, register
+--                   reason the casual_peer rung does not beat the precise_literary one.
+--   Mira     theta 1.10  - every stated constraint honoured, communicative goal reached, register
 --                   consistent end to end. Reads as a competent non-native: over-explicit
 --                   subjects, `because` where `since`/`as` is smoother, `telephoned` and
 --                   `I would like to ask` where a native shortens, no contractions at all,
 --                   and the same sentence shape three times running — accurate, and paying
 --                   for it on `range`.
---   Kestrel 1580  - idiomatic. Correct phrasal verbs (`comes on`, `turn it up`, `came
+--   Kestrel  theta 1.70  - idiomatic. Correct phrasal verbs (`comes on`, `turn it up`, `came
 --                   through`, `come down with`, `hand it in`, `send out`, `clears up`),
 --                   correct aspect, and the natural hedges (`I was wondering if I could`,
 --                   `Would you mind`, `I'm afraid`, `Sorry to bother you`). Uses the grammar
 --                   the item is really testing instead of a safe paraphrase of it.
---   Sable 1820    - what a native actually writes in that situation. Does the PRAGMATIC work,
+--   Sable    theta 2.30  - what a native actually writes in that situation. Does the PRAGMATIC work,
 --                   not only the grammatical work: blames the building rather than the person
 --                   upstairs, says who she is before asking a stranger for homework help,
 --                   answers the bank's next question before it is asked, offers the manager a
@@ -432,11 +442,11 @@ insert into public.submissions
   (id, match_id, user_id, seat, content, media_path, selected_option,
    elapsed_ms, paste_detected, submitted_at)
 with roster (bot_slug, display_rating, seq, plan_ms, ms_per_char) as (values
-  ('wren-the-copyist',          940, 1, 12000, 240),
-  ('orrin-the-ferryman',        1120, 2, 18000, 230),
-  ('mira-the-cartographer',     1340, 3, 22000, 210),
-  ('kestrel-the-archivist',     1580, 4, 26000, 190),
-  ('sable-the-lantern-keeper',  1820, 5, 16000, 140)
+  ('wren-the-copyist',          1125, 1, 12000, 240),
+  ('orrin-the-ferryman',        1688, 2, 18000, 230),
+  ('mira-the-cartographer',     2375, 3, 22000, 210),
+  ('kestrel-the-archivist',     3125, 4, 26000, 190),
+  ('sable-the-lantern-keeper',  3875, 5, 16000, 140)
 ),
 seats as (
   select
@@ -699,6 +709,20 @@ on conflict (id) do update set
     and mp.bot_slug not in ('wren-the-copyist', 'orrin-the-ferryman', 'mira-the-cartographer',
                             'kestrel-the-archivist', 'sable-the-lantern-keeper');
 
+  -- THE DRIFT CHECK. §1's roster CTEs type the display ratings instead of reading them, so the
+  -- seated theta_before can disagree with the roster the code resolves against. It did: the
+  -- display scale moved and this file did not, which left every bot rated for a scale nobody
+  -- was on any more. Compare what landed against `public.bots` through the same conversion the
+  -- CTEs use. The slack is half a display point, which is all the integer roster column can
+  -- cost a rung, plus float noise. The drift this catches is a whole rung wide.
+  select count(*) into n_offrung
+  from public.match_participants mp
+  join public.matches m on m.id = mp.match_id
+  join public.bots b on b.slug = mp.bot_slug
+  where m.world_slug = 'en' and m.ladder_slug = 'duel' and mp.is_bot
+    and abs(mp.theta_before - (b.display_rating - 1000)::double precision / 1250.0)
+        > 0.5 / 1250.0 + 1e-9;
+
   -- Answers must fit the limit the item states; every constraint_text says UNDER N, so this
   -- is strict. An over-long bot answer would be a bot that cannot honour its own constraint,
   -- which is the axis Orrin is supposed to be the only one failing, and only on purpose.
@@ -759,7 +783,20 @@ on conflict (id) do update set
       n_mislabel;
   end if;
   if n_leak > 0 then
-    raise exception 'en bot pool: % seat(s) carry a bot_slug that is not in BOT_ROSTER', n_leak;
+    raise exception 'en bot pool: % seat(s) carry a bot_slug that is not in the en cast', n_leak;
+  end if;
+  if n_offrung > 0 then
+    select string_agg(distinct mp.bot_slug || ' (seated ' || mp.theta_before
+                      || ', roster ' || b.display_rating || ')', ', ')
+      into bad
+    from public.match_participants mp
+    join public.matches m on m.id = mp.match_id
+    join public.bots b on b.slug = mp.bot_slug
+    where m.world_slug = 'en' and m.ladder_slug = 'duel' and mp.is_bot
+      and abs(mp.theta_before - (b.display_rating - 1000)::double precision / 1250.0)
+        > 0.5 / 1250.0 + 1e-9;
+    raise exception 'en bot pool: % seat(s) sit off their rung in public.bots: %',
+      n_offrung, bad;
   end if;
   if n_overlong > 0 then
     select string_agg(i.external_id || '/' || mp.bot_slug, ', ') into bad
