@@ -35,6 +35,22 @@ export {
 } from './attempt'
 
 export {
+  type Interval,
+  intervalFromRate,
+  isNearMiss,
+  isTeachable,
+  mayPersistPrior,
+  type MeasuredPrior,
+  PRIOR_CONFIRM_SAMPLES,
+  PRIOR_RESCUE_SAMPLES,
+  PRIOR_SCREEN_MAX_P0,
+  PRIOR_SCREEN_SAMPLES,
+  PRIOR_WILSON_Z,
+  TEACHABLE_MAX_P0,
+  wilsonInterval,
+} from './prior'
+
+export {
   acceptedAnswers,
   type AnswerKey,
   AnswerKeyError,

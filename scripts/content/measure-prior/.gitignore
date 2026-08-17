@@ -1,0 +1,3 @@
+# Measurement artefacts: a local, resumable cache of API calls rather than a source file.
+# The numbers that matter are written up in docs/research/09-prior-filter.md.
+out/

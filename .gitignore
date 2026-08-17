@@ -40,3 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .gstack/
+
+# item generation: the virtualenv and the bulky intermediates. out/candidates.jsonl,
+# out/rejected.jsonl and out/funnel.json are the deliverables and stay tracked.
+scripts/content/.venv/
+scripts/content/generate/out/seeds.jsonl
+scripts/content/generate/out/lexicon.json
+scripts/content/generate/out/raw_candidates.jsonl
+scripts/content/generate/out/adjudication.jsonl
+scripts/content/generate/__pycache__/

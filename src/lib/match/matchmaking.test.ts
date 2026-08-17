@@ -127,6 +127,16 @@ const bot = (slug: string, theta: number, over: Partial<PoolPerformance> = {}): 
 const thetaFor = (display: number) => (display - DISPLAY_INIT) / DISPLAY_SCALE
 
 /**
+ * A pool performance for `slug`, seated at its RUNG's theta.
+ *
+ * Every bot fixture below goes through this rather than naming a theta or a rating, so a seated
+ * bot and the roster entry it resolves to cannot disagree — which is its own class of bug, and
+ * the one §4 of the en seed checks for at seed time.
+ */
+const rungBot = (slug: string, archetype: BotDefinition['archetype']) =>
+  bot(slug, thetaFor(rung(archetype)))
+
+/**
  * The candidate fixtures below are placed in BAND WIDTHS, never in bare display points.
  *
  * A candidate "150 points away" only means something next to the schedule it is being measured
@@ -203,7 +213,7 @@ describe('chooseOpponent — self-match exclusion', () => {
       [
         human({ submissionId: 's1', authorUserId: 'me' }),
         human({ submissionId: 's2', authorUserId: 'me', authorTheta: 0.05 }),
-        bot('rin', thetaFor(rung('casual_peer'))),
+        rungBot('rin', 'casual_peer'),
       ],
       withJaRoster(),
     )
@@ -322,7 +332,7 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
       me,
       [
         human({ submissionId: 'miles-away', authorTheta: above(PAST_THE_CAP) }),
-        bot('kaori', thetaFor(rung('warm_guide'))),
+        rungBot('kaori', 'warm_guide'),
       ],
       withJaRoster(),
     )
@@ -334,7 +344,7 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
   })
 
   it('seats a bot when the pool is empty, and says so', () => {
-    const d = chooseOpponent(me, [bot('haruki', thetaFor(rung('precise_literary')))], withJaRoster())
+    const d = chooseOpponent(me, [rungBot('haruki', 'precise_literary')], withJaRoster())
     expect(d.kind).toBe('bot')
     if (d.kind === 'bot') expect(d.reason).toBe('pool_empty')
   })
@@ -358,7 +368,7 @@ describe('chooseOpponent — the cap and the bot fallback', () => {
       me,
       [
         human({ submissionId: 'edge', authorTheta: above(MAX_BAND_DISPLAY) }), // exactly at the cap
-        bot('kaori', thetaFor(rung('warm_guide'))),
+        rungBot('kaori', 'warm_guide'),
       ],
       withJaRoster(),
     )
@@ -434,7 +444,7 @@ describe('the roster is per-world content, not a constant', () => {
     // The bug this guards: a Japanese pool still carrying the old shared English slugs. It
     // used to degrade silently — `botDisplayRating` derived a rating from the seeded theta and
     // the match looked entirely normal, with an English character answering in Japanese.
-    const stray = bot('wren-the-copyist', thetaFor(rung('earnest_beginner')))
+    const stray = rungBot('wren-the-copyist', 'earnest_beginner')
     expect(botBySlug(JA_ROSTER, 'wren-the-copyist')).toBeUndefined()
     expect(() => botDisplayRating(JA_ROSTER, stray)).toThrow(MatchmakingError)
     expect(() => botDisplayRating(JA_ROSTER, stray)).toThrow(/not in the roster for world 'ja'/)
@@ -456,7 +466,7 @@ describe('the roster is per-world content, not a constant', () => {
       reason: 'no_opponent_available',
     })
     // ...but a bot performance with no cast behind it is a seeding error, not a fallback.
-    expect(() => chooseOpponent(me, [bot('satoru', thetaFor(rung('earnest_beginner')))], { roster })).toThrow(
+    expect(() => chooseOpponent(me, [rungBot('satoru', 'earnest_beginner')], { roster })).toThrow(
       MatchmakingError,
     )
   })
@@ -659,7 +669,7 @@ describe('findGhostMatch', () => {
   })
 
   it('creates an UNRATED match when the seat goes to a bot', async () => {
-    const q = fakeQueries([bot('haruki', thetaFor(rung('precise_literary')))])
+    const q = fakeQueries([rungBot('haruki', 'precise_literary')])
     const res = await findGhostMatch(input, { queries: q, newMatchId: () => 'm-bot' })
     expect(res).toMatchObject({ ok: true, isRated: false })
     if (res.ok && !res.reused) expect(res.opponent.kind).toBe('bot')
@@ -668,7 +678,7 @@ describe('findGhostMatch', () => {
   })
 
   it('fetches the roster for THE MATCH’S WORLD and seats that world’s cast', async () => {
-    const q = fakeQueries([bot('wren-the-copyist', thetaFor(rung('earnest_beginner')))], { roster: EN_ROSTER })
+    const q = fakeQueries([rungBot('wren-the-copyist', 'earnest_beginner')], { roster: EN_ROSTER })
     const res = await findGhostMatch({ ...input, worldSlug: 'en' }, {
       queries: q,
       newMatchId: () => 'm-en',

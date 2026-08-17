@@ -1,0 +1,83 @@
+{
+  "funnel": [
+    {
+      "stage": "generated",
+      "kept": 27
+    },
+    {
+      "stage": "A shape",
+      "kept": 26
+    },
+    {
+      "stage": "B answer key",
+      "kept": 25
+    },
+    {
+      "stage": "C well formed",
+      "kept": 20
+    },
+    {
+      "stage": "D morphology",
+      "kept": 20
+    },
+    {
+      "stage": "E level",
+      "kept": 17,
+      "classifier": true
+    },
+    {
+      "stage": "F duplicates",
+      "kept": 17
+    },
+    {
+      "stage": "G adjudication",
+      "kept": 13
+    }
+  ],
+  "drop_reasons": {
+    "c4_glyph_item_carries_a_sentence": 4,
+    "e2_jlpt_classifier_above_target": 2,
+    "g2_second_defensible_answer": 2,
+    "a5_restates_a_seeded_item": 1,
+    "b2_lure_is_accepted_by_the_key": 1,
+    "c2_answer_appears_in_the_material": 1,
+    "e3_es_vocabulary_above_target_level": 1,
+    "g1_stated_answer_is_wrong": 1,
+    "g4_above_the_stated_level": 1
+  },
+  "survivors_by_family": {
+    "gender-exception": 1,
+    "godan-lookalike": 1,
+    "capitals-interference": 1,
+    "ser-estar": 1,
+    "stress-doubling": 1,
+    "preposition-verb": 2,
+    "plural-f-exception": 1,
+    "article-sound": 1,
+    "particle-context": 2,
+    "preterite-irregular": 1,
+    "te-voicing": 1
+  },
+  "survivors_by_world": {
+    "es": 3,
+    "ja": 4,
+    "en": 6
+  },
+  "survivors_by_level": {
+    "A1": 2,
+    "N4": 2,
+    "A2": 5,
+    "B1": 2,
+    "N5": 2
+  },
+  "settings": {
+    "input": "/Users/arjavmehta/AI Stuff/loxelingo/scripts/content/generate/out/raw_candidates.jsonl",
+    "ja_unknown_budget": 2,
+    "cefr_slack": 1,
+    "jlpt_slack": 1,
+    "near_duplicate_threshold": 0.8,
+    "no_classifier": false,
+    "no_adjudication": false,
+    "concurrency": 12
+  }
+}

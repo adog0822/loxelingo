@@ -178,7 +178,10 @@ describe('the seeds derive theta from the same two constants', () => {
   // precision / 1250.0` in the ja/en pools and `((display_rating - 1000) / 1250.0)::double
   // precision` in the closed-item scorer.
   const conversion = new RegExp(
-    `\\(?(?:\\w+\\.)?display_rating - ${DISPLAY_INIT}\\)(?:::double precision)?\\s*/\\s*${DISPLAY_SCALE}\\.0`,
+    [
+      `\\(?(?:\\w+\\.)?display_rating - ${DISPLAY_INIT}\\)`,
+      `(?:::double precision)?\\s*/\\s*${DISPLAY_SCALE}\\.0`,
+    ].join(''),
   )
 
   it.each([
