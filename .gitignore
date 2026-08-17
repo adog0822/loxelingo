@@ -47,5 +47,8 @@ scripts/content/.venv/
 scripts/content/generate/out/seeds.jsonl
 scripts/content/generate/out/lexicon.json
 scripts/content/generate/out/raw_candidates.jsonl
+scripts/content/generate/out/raw_round*.jsonl
+scripts/content/generate/out/*.round1.json
+scripts/content/generate/out/*.round1.jsonl
 scripts/content/generate/out/adjudication.jsonl
 scripts/content/generate/__pycache__/

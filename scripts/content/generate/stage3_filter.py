@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 import sys
 import time
@@ -603,14 +604,40 @@ def adjudication_prompt(row: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def adjudicate(rows: list[dict[str, Any]], rejects: Rejects, concurrency: int) -> list[dict[str, Any]]:
+def adjudicate(rows: list[dict[str, Any]], rejects: Rejects, concurrency: int,
+               budget_seconds: float) -> tuple[list[dict[str, Any]], int]:
+    """
+    Returns the survivors and the number of items that could not be judged.
+
+    Verdicts are cached in `out/adjudication.jsonl` and a rerun only calls for the items missing
+    from it, so a run interrupted by rate limiting can be finished by running the stage again.
+
+    An item whose adjudication never returns is kept, tagged `adjudicated: false`, and counted.
+    A call that failed is not evidence of a defect, and dropping on it would silently delete good
+    items whenever the API is busy.
+
+    `budget_seconds` bounds the stage. Under heavy rate limiting a single verdict can cost minutes
+    of backoff, so past the budget the remaining items are left unjudged rather than allowed to
+    hold up the whole pipeline. Rerunning the stage picks them up from the cache side.
+    """
     import anthropic
 
-    client = anthropic.Anthropic(api_key=load_env("ANTHROPIC_API_KEY"), max_retries=3)
+    client = anthropic.Anthropic(api_key=load_env("ANTHROPIC_API_KEY"), max_retries=6, timeout=120.0)
     verdicts: dict[str, dict[str, Any]] = {}
+    if ADJUDICATION_PATH.exists():
+        for cached in read_jsonl(ADJUDICATION_PATH):
+            external_id = cached.pop("external_id", None)
+            if external_id:
+                verdicts[external_id] = cached
+    wanted = [row for row in rows if row["external_id"] not in verdicts]
+    print(f"  {len(verdicts)} verdicts cached, {len(wanted)} to fetch")
+
+    deadline = time.time() + budget_seconds
 
     def one(row: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
-        for attempt in range(3):
+        for attempt in range(6):
+            if time.time() > deadline:
+                return row["external_id"], None
             try:
                 response = client.messages.create(
                     model=ADJUDICATION_MODEL,
@@ -626,27 +653,32 @@ def adjudicate(rows: list[dict[str, Any]], rejects: Rejects, concurrency: int) -
                         return row["external_id"], dict(block.input)
                 return row["external_id"], None
             except Exception:  # noqa: BLE001
-                time.sleep(1.5 * (attempt + 1))
+                time.sleep(min(30.0, 2 ** attempt) + random.random() * 2)
         return row["external_id"], None
 
     started = time.time()
-    with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        futures = [pool.submit(one, row) for row in rows]
-        for done, future in enumerate(as_completed(futures), start=1):
-            external_id, verdict = future.result()
-            if verdict is not None:
-                verdicts[external_id] = verdict
-            if done % 200 == 0 or done == len(futures):
-                print(f"  adjudicated {done}/{len(futures)} in {time.time() - started:.0f}s")
+    if wanted:
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = [pool.submit(one, row) for row in wanted]
+            for done, future in enumerate(as_completed(futures), start=1):
+                external_id, verdict = future.result()
+                if verdict is not None:
+                    verdicts[external_id] = verdict
+                if done % 200 == 0 or done == len(futures):
+                    print(f"  adjudicated {done}/{len(futures)} in {time.time() - started:.0f}s")
 
     write_jsonl(ADJUDICATION_PATH, [{"external_id": k, **v} for k, v in verdicts.items()])
 
     kept: list[dict[str, Any]] = []
+    unjudged = 0
     for row in rows:
         verdict = verdicts.get(row["external_id"])
         if verdict is None:
-            rejects.drop(row, "G", "g0_adjudication_did_not_return")
+            unjudged += 1
+            row["adjudicated"] = False
+            kept.append(row)
             continue
+        row["adjudicated"] = True
         if not verdict.get("is_answer_correct", False):
             rejects.drop(row, "G", "g1_stated_answer_is_wrong", str(verdict.get("reason", "")))
             continue
@@ -662,7 +694,7 @@ def adjudicate(rows: list[dict[str, Any]], rejects: Rejects, concurrency: int) -
             rejects.drop(row, "G", "g4_above_the_stated_level", str(verdict.get("reason", "")))
             continue
         kept.append(row)
-    return kept
+    return kept, unjudged
 
 
 # ── driver ──────────────────────────────────────────────────────────────────────────────────
@@ -678,6 +710,11 @@ def finalise(row: dict[str, Any]) -> dict[str, Any]:
         note = f"{note} The predicted wrong answer is {lure}."
     answer["note"] = note
     row["answer"] = answer
+    # `eligible_for_prior` is the field a p0 harness should read. It is written on every row of
+    # both output files, so a consumer that filters on it is correct and a consumer that reads
+    # only `candidates.jsonl` is correct too. See the header for why an unverified key is worse
+    # than a merely low-quality item.
+    row["eligible_for_prior"] = bool(row.get("adjudicated"))
     return row
 
 
@@ -693,6 +730,8 @@ def main() -> None:
     parser.add_argument("--near-duplicate-threshold", type=float, default=0.8)
     parser.add_argument("--no-classifier", action="store_true")
     parser.add_argument("--no-adjudication", action="store_true")
+    parser.add_argument("--adjudication-budget-seconds", type=float, default=900.0,
+                        help="wall clock ceiling on gate G; past it the rest are kept unjudged")
     parser.add_argument("--concurrency", type=int, default=12)
     args = parser.parse_args()
 
@@ -728,10 +767,11 @@ def main() -> None:
     funnel.append({"stage": "F duplicates", "kept": len(rows)})
     print(f"  F duplicates      -> {len(rows)}")
 
+    unjudged = 0
     if not args.no_adjudication:
-        rows = adjudicate(rows, rejects, args.concurrency)
-        funnel.append({"stage": "G adjudication", "kept": len(rows)})
-        print(f"  G adjudication    -> {len(rows)}")
+        rows, unjudged = adjudicate(rows, rejects, args.concurrency, args.adjudication_budget_seconds)
+        funnel.append({"stage": "G adjudication", "kept": len(rows), "unjudged_kept": unjudged})
+        print(f"  G adjudication    -> {len(rows)} ({unjudged} kept unjudged)")
 
     survivors = [finalise(row) for row in rows]
     written = write_jsonl(CANDIDATES_PATH, survivors)
@@ -742,6 +782,7 @@ def main() -> None:
     by_level = Counter(row["target_level"] for row in survivors)
     FUNNEL_PATH.write_text(json.dumps({
         "funnel": funnel,
+        "kept_without_adjudication": unjudged,
         "drop_reasons": dict(rejects.counts.most_common()),
         "survivors_by_family": dict(by_family),
         "survivors_by_world": dict(by_world),
