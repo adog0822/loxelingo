@@ -110,12 +110,35 @@ in `out/funnel.json`.
 | F duplicates | exact and near duplicate within the batch, by character or word shingle overlap inside a family |
 | G adjudication | one Haiku call per survivor at temperature 0: is the answer right, is a second answer defensible, is any distractor also acceptable, is the level honest |
 
-Gate G exists because the deterministic gates cannot see a distractor that happens to be true, and
-that item would punish a player who taught well.
+### Gate G is a correctness gate, not a quality nicety
+
+The p0 filter in `docs/research/09-prior-filter.md` keeps items the avatar answers **wrong** without
+teaching. Take an item whose key says は where the truth is が:
+
+* the avatar answers が, which is right in reality
+* it is scored against the key, so it is marked wrong
+* every sample misses, p0 = 0.0, Wilson upper bound 0.161, top of the eligible list
+* it enters the bank, a player teaches が correctly, and the player is marked wrong
+
+A broken key is not merely invisible to the p0 filter. It outscores a correct item, so the filter
+**selects for it**. That is why gate G runs before anything is measured, and why an item it never
+judged cannot leave through the main file.
 
 ## Output
 
-`out/candidates.jsonl`, one JSON object per line, ready for an ingestion step someone else owns:
+Stage 3 writes two item files and the split is the safety property:
+
+| File | Contents | Safe to measure |
+| --- | --- | --- |
+| `out/candidates.jsonl` | items gate G judged and passed, every row `eligible_for_prior: true` | yes |
+| `out/candidates.pending.jsonl` | items gate G never returned a verdict on, every row `eligible_for_prior: false` | **no** |
+
+A consumer that reads `candidates.jsonl` is correct by default. A consumer that reads
+`eligible_for_prior` is correct whichever file it opened. There is no way to read the main file and
+silently measure something unverified. Rerunning stage 3 moves rows from pending to eligible as
+verdicts arrive; the cache means it only pays for what is still missing.
+
+One JSON object per line, ready for an ingestion step someone else owns:
 
 ```json
 {
@@ -136,7 +159,9 @@ that item would punish a player who taught well.
   "cold_start_beta": -0.3,
   "source": "loxelingo-generated-v1",
   "license": "proprietary",
-  "is_active": true
+  "is_active": true,
+  "adjudicated": true,
+  "eligible_for_prior": true
 }
 ```
 
@@ -146,7 +171,12 @@ Notes for whoever ingests these:
   seeded id, so the two sets cannot collide. The hash covers the task text and the answer, so the
   same item regenerated gets the same id and any edit to either field gets a new one.
 * `lure` is repeated at the end of `answer.note`, because the p0 harness needs the prediction it is
-  testing and `note` is the field that travels with the row.
+  testing and `note` is the field that travels with the row. `lure` is a guess the generating model
+  made about its own errors, not a measurement. The p0 run can convert it into one by recording how
+  often the avatar's wrong answer actually equals it; low agreement means the divergence families
+  should be reweighted on measured p0 rather than on predicted divergence.
+* `eligible_for_prior` is the field to filter on. It is false exactly when gate G returned no
+  verdict, and an item in that state has an unverified answer key.
 * Three `kind` values are new and all three are Spanish, where the bank has no forge items yet:
   `copula_choice`, `gender_agreement`, `accent_mark`. Nothing in `src/` switches on `items.kind`;
   the renderer switches on `prompt.kind`, which stays `brief` or `glyph`.

@@ -28,7 +28,23 @@ The gates run cheapest first and every drop is recorded with a reason, so the fu
                     distractor is also correct. Deterministic checks cannot see a distractor that
                     happens to be true.
 
-Output: out/candidates.jsonl, out/rejected.jsonl, out/funnel.json, out/adjudication.jsonl
+Gate G is a correctness gate on the whole pipeline rather than a quality nicety, and the reason is
+the shape of the filter downstream. `docs/research/09-prior-filter.md` keeps an item when the
+avatar answers it WRONG without teaching. Now take an item whose key says は where the truth is が:
+
+  * the avatar answers が, which is right in reality
+  * it is scored against the key, so it is marked wrong
+  * every sample misses, p0 = 0.0, Wilson upper bound 0.161, top of the eligible list
+  * it enters the bank, a player teaches が correctly, and the player is marked wrong
+
+A broken key is not merely invisible to the p0 filter. It outscores a perfect item, so the filter
+selects for it. That is why an item gate G never judged leaves through `candidates.pending.jsonl`
+rather than `candidates.jsonl`, and why every row of both files carries `eligible_for_prior`. A
+consumer that reads the main file is right by default, and a consumer that reads the field is right
+whichever file it came from.
+
+Output: out/candidates.jsonl (eligible), out/candidates.pending.jsonl (unjudged),
+out/rejected.jsonl, out/funnel.json, out/adjudication.jsonl
 """
 
 from __future__ import annotations
@@ -49,6 +65,7 @@ from common import (
     ADJUDICATION_PATH,
     CANDIDATES_PATH,
     FUNNEL_PATH,
+    PENDING_PATH,
     LEXICON_PATH,
     RAW_PATH,
     REJECTED_PATH,
@@ -586,6 +603,22 @@ ADJUDICATION_TOOL = {
 }
 
 
+def _is_retryable(exc: BaseException) -> bool:
+    """
+    Overload and timeouts are worth waiting out. A 4xx other than 429 is not.
+
+    The Anthropic SDK sets `x-should-retry: false` on the ones that will never succeed, an expired
+    key or an empty credit balance among them, and those have to fail loudly and immediately.
+    """
+    status = getattr(exc, "status_code", None)
+    if status == 429 or (isinstance(status, int) and status >= 500):
+        return True
+    if isinstance(status, int) and 400 <= status < 500:
+        return False
+    # Connection level failures carry no status and are worth another attempt.
+    return True
+
+
 def adjudication_prompt(row: dict[str, Any]) -> str:
     prompt = row["prompt"]
     answer = row["answer"]
@@ -633,10 +666,11 @@ def adjudicate(rows: list[dict[str, Any]], rejects: Rejects, concurrency: int,
     print(f"  {len(verdicts)} verdicts cached, {len(wanted)} to fetch")
 
     deadline = time.time() + budget_seconds
+    fatal: list[str] = []
 
     def one(row: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
         for attempt in range(6):
-            if time.time() > deadline:
+            if time.time() > deadline or fatal:
                 return row["external_id"], None
             try:
                 response = client.messages.create(
@@ -652,7 +686,14 @@ def adjudicate(rows: list[dict[str, Any]], rejects: Rejects, concurrency: int,
                     if block.type == "tool_use":
                         return row["external_id"], dict(block.input)
                 return row["external_id"], None
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                # A 400 is a statement about the request or the account, not about load. Retrying
+                # it burns the whole budget and looks exactly like throttling from the outside,
+                # which is how an exhausted credit balance once cost fifty minutes of silence.
+                if not _is_retryable(exc):
+                    if not fatal:
+                        fatal.append(f"{type(exc).__name__}: {str(exc)[:300]}")
+                    return row["external_id"], None
                 time.sleep(min(30.0, 2 ** attempt) + random.random() * 2)
         return row["external_id"], None
 
@@ -668,6 +709,11 @@ def adjudicate(rows: list[dict[str, Any]], rejects: Rejects, concurrency: int,
                     print(f"  adjudicated {done}/{len(futures)} in {time.time() - started:.0f}s")
 
     write_jsonl(ADJUDICATION_PATH, [{"external_id": k, **v} for k, v in verdicts.items()])
+    if fatal:
+        print(f"  gate G stopped early, the API refused in a way retrying cannot fix:\n"
+              f"    {fatal[0]}\n"
+              f"  every unjudged item is quarantined in {PENDING_PATH.name} and none of them is "
+              f"eligible for the p0 filter. Fix the account and rerun this stage.", file=sys.stderr)
 
     kept: list[dict[str, Any]] = []
     unjudged = 0
@@ -773,16 +819,25 @@ def main() -> None:
         funnel.append({"stage": "G adjudication", "kept": len(rows), "unjudged_kept": unjudged})
         print(f"  G adjudication    -> {len(rows)} ({unjudged} kept unjudged)")
 
+    # An item that gate G never judged is quarantined rather than shipped. The p0 filter keeps
+    # items the avatar answers WRONG, so an item whose key is itself wrong scores p0 = 0.0 and
+    # sorts to the top of the eligible list. A bad key is not merely noise on that surface, it is
+    # selected for. Anything unverified therefore leaves through a different file.
     survivors = [finalise(row) for row in rows]
-    written = write_jsonl(CANDIDATES_PATH, survivors)
+    eligible = [row for row in survivors if row["eligible_for_prior"]]
+    pending = [row for row in survivors if not row["eligible_for_prior"]]
+
+    written = write_jsonl(CANDIDATES_PATH, eligible)
+    write_jsonl(PENDING_PATH, pending)
     write_jsonl(REJECTED_PATH, rejects.rows)
 
-    by_family = Counter(row["divergence_family"] for row in survivors)
-    by_world = Counter(row["world_slug"] for row in survivors)
-    by_level = Counter(row["target_level"] for row in survivors)
+    by_family = Counter(row["divergence_family"] for row in eligible)
+    by_world = Counter(row["world_slug"] for row in eligible)
+    by_level = Counter(row["target_level"] for row in eligible)
     FUNNEL_PATH.write_text(json.dumps({
         "funnel": funnel,
-        "kept_without_adjudication": unjudged,
+        "eligible_for_prior": len(eligible),
+        "quarantined_pending_adjudication": len(pending),
         "drop_reasons": dict(rejects.counts.most_common()),
         "survivors_by_family": dict(by_family),
         "survivors_by_world": dict(by_world),
@@ -790,7 +845,10 @@ def main() -> None:
         "settings": vars(args),
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print(f"\ncandidates written: {written} -> {CANDIDATES_PATH}")
+    print(f"\neligible for the p0 filter: {written} -> {CANDIDATES_PATH}")
+    if pending:
+        print(f"quarantined, adjudication never returned: {len(pending)} -> {PENDING_PATH}")
+        print("  rerun this stage to finish them; verdicts already fetched are cached")
     print("drop reasons, most frequent first:")
     for reason, count in rejects.counts.most_common():
         print(f"  {count:6d}  {reason}")

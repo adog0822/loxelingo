@@ -2,73 +2,101 @@
   "funnel": [
     {
       "stage": "generated",
-      "kept": 27
+      "kept": 4266
     },
     {
       "stage": "A shape",
-      "kept": 26
+      "kept": 4202
     },
     {
       "stage": "B answer key",
-      "kept": 25
+      "kept": 4097
     },
     {
       "stage": "C well formed",
-      "kept": 20
+      "kept": 3892
     },
     {
       "stage": "D morphology",
-      "kept": 20
+      "kept": 3714
     },
     {
       "stage": "E level",
-      "kept": 17,
+      "kept": 3239,
       "classifier": true
     },
     {
       "stage": "F duplicates",
-      "kept": 17
+      "kept": 2604
     },
     {
       "stage": "G adjudication",
-      "kept": 13
+      "kept": 2208,
+      "unjudged_kept": 988
     }
   ],
+  "eligible_for_prior": 1220,
+  "quarantined_pending_adjudication": 988,
   "drop_reasons": {
-    "c4_glyph_item_carries_a_sentence": 4,
-    "e2_jlpt_classifier_above_target": 2,
-    "g2_second_defensible_answer": 2,
-    "a5_restates_a_seeded_item": 1,
-    "b2_lure_is_accepted_by_the_key": 1,
-    "c2_answer_appears_in_the_material": 1,
-    "e3_es_vocabulary_above_target_level": 1,
-    "g1_stated_answer_is_wrong": 1,
-    "g4_above_the_stated_level": 1
+    "f1_exact_duplicate": 618,
+    "e2_jlpt_classifier_above_target": 310,
+    "g1_stated_answer_is_wrong": 241,
+    "e3_en_vocabulary_above_target_level": 150,
+    "c2_answer_appears_in_the_material": 97,
+    "d8_te_voicing_target_is_not_godan": 96,
+    "g4_above_the_stated_level": 76,
+    "b2_lure_is_accepted_by_the_key": 73,
+    "a5_restates_a_seeded_item": 63,
+    "c4_glyph_item_carries_a_sentence": 60,
+    "d2_answer_is_not_a_form_of_the_target": 51,
+    "c1_em_dash_in_copy": 47,
+    "g2_second_defensible_answer": 45,
+    "g3_distractor_is_also_correct": 34,
+    "d9_answer_lemmatises_to_a_different_word": 30,
+    "b4_duplicate_options": 28,
+    "f2_near_duplicate": 17,
+    "e3_es_vocabulary_above_target_level": 10,
+    "e1_japanese_vocabulary_outside_n5_n4": 5,
+    "b3_wrong_option_count": 3,
+    "a1_missing_field": 1,
+    "b5_correct_not_among_options": 1,
+    "c6_japanese_answer_without_japanese_script": 1,
+    "d6_target_is_not_godan": 1
   },
   "survivors_by_family": {
-    "gender-exception": 1,
-    "godan-lookalike": 1,
-    "capitals-interference": 1,
-    "ser-estar": 1,
-    "stress-doubling": 1,
-    "preposition-verb": 2,
-    "plural-f-exception": 1,
-    "article-sound": 1,
-    "particle-context": 2,
-    "preterite-irregular": 1,
-    "te-voicing": 1
+    "stress-doubling": 28,
+    "godan-lookalike": 23,
+    "naadj-crossover": 27,
+    "gender-exception": 91,
+    "stem-change-preterite": 18,
+    "preterite-irregular": 46,
+    "te-voicing": 29,
+    "irregular-participle": 14,
+    "irregular-verb": 9,
+    "article-sound": 117,
+    "countability-context": 67,
+    "preposition-verb": 137,
+    "particle-context": 214,
+    "por-para": 67,
+    "ser-estar": 118,
+    "gustar-agreement": 30,
+    "plural-f-exception": 11,
+    "capitals-interference": 48,
+    "accent-minimal-pair": 70,
+    "transitivity-pair": 48,
+    "rendaku-blocked": 8
   },
   "survivors_by_world": {
-    "es": 3,
-    "ja": 4,
-    "en": 6
+    "en": 422,
+    "ja": 358,
+    "es": 440
   },
   "survivors_by_level": {
-    "A1": 2,
-    "N4": 2,
-    "A2": 5,
-    "B1": 2,
-    "N5": 2
+    "B1": 289,
+    "A2": 404,
+    "N5": 112,
+    "N4": 246,
+    "A1": 169
   },
   "settings": {
     "input": "/Users/arjavmehta/AI Stuff/loxelingo/scripts/content/generate/out/raw_candidates.jsonl",
@@ -78,6 +106,7 @@
     "near_duplicate_threshold": 0.8,
     "no_classifier": false,
     "no_adjudication": false,
-    "concurrency": 12
+    "adjudication_budget_seconds": 120.0,
+    "concurrency": 4
   }
 }

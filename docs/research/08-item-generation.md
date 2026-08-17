@@ -16,15 +16,18 @@ how to run it and what each stage does.
 
 ## Headline
 
-**5400 items were generated across two rounds and 2208 survive to
-`scripts/content/generate/out/candidates.jsonl`.** Every one carries a `lure`: the wrong answer its
-divergence family predicts the model will reach for. The bank splits 854 Spanish, 738 English,
-616 Japanese, and 1284 of the 2208 are multiple choice.
+**5400 items were generated across two rounds, 2604 reached the last gate, and 1220 are eligible
+for the p0 filter.** Every one carries a `lure`: the wrong answer its divergence family predicts
+the model will reach for.
 
-The honest caveat sits in the last gate. 988 of the 2208 were kept without being adjudicated,
-because the Anthropic API rate-limited the run and an item that could not be checked is not an item
-known to be broken. Those rows carry `adjudicated: false` and rerunning stage 3 picks them up from
-the verdict cache.
+**988 more are finished in every other respect and are quarantined in
+`out/candidates.pending.jsonl`, because gate G never returned a verdict on them.** They are not
+eligible and they must not be measured. The Anthropic account ran out of credit partway through
+adjudication, and the remaining calls return
+`400 invalid_request_error: Your credit balance is too low`. Adding credit and rerunning stage 3
+finishes them off the verdict cache without repaying for the 1616 already judged.
+
+The reason this is a hard blocker rather than a quality caveat is in section 4.
 
 ## Stage 1: which datasets loaded
 
@@ -109,9 +112,12 @@ Seven gates on the merged 4266, cheapest first.
 | D morphology | SudachiPy for Japanese, spaCy for English and Spanish | 3714 | 178 |
 | E level | vocabulary membership against the stage 1 lists, plus the JLPT sentence classifier | 3239 | 475 |
 | F duplicates | exact and near duplicate inside a family | 2604 | 635 |
-| G adjudication | Haiku at temperature 0 on the item and its key | **2208** | 396 |
+| G adjudication | Haiku at temperature 0 on the item and its key | **1220 eligible, 988 quarantined** | 396 |
 
-**2208 of 4266 survive, 51.8 percent. Against the 5400 items actually generated, 40.9 percent.**
+**Of 4266 unique candidates, 1220 are eligible for the p0 filter (28.6 percent), 988 are
+quarantined pending adjudication, and 2058 were dropped.** Had gate G completed at the drop rate
+it showed on the 1616 items it did judge, roughly 746 of the 988 would join the eligible set for a
+total near 1966, but that is an extrapolation and the file reflects only what was verified.
 
 Drop reasons, most frequent first:
 
@@ -174,6 +180,71 @@ was copied from the seeded item `en-forge-participle-write`, which contains one,
 copied the punctuation along with the shape. The exemplar was fixed between rounds and the second
 round produced almost none. It is a small reminder that the exemplar is the strongest instruction in
 the prompt.
+
+### 4. Why an unjudged item cannot be measured
+
+Gate G is a correctness gate on the whole pipeline. The p0 filter in
+`docs/research/09-prior-filter.md` keeps items the avatar answers **wrong** without teaching. Take
+an item whose key says は where the truth is が:
+
+* the avatar answers が, which is right in reality
+* it is scored against the key, so it is marked wrong
+* every sample misses, p0 = 0.0, Wilson upper bound 0.161, top of the eligible list
+* it enters the bank, a player teaches が correctly, and the player is marked wrong
+
+A broken key is not merely invisible to the p0 filter. It **outscores a correct item**, so the
+filter selects for it. The numbers here say the risk is real rather than theoretical: of the 1616
+items gate G did judge, **241 had an answer the adjudicator called wrong and 34 had a distractor
+that was also acceptable**. Those 275 are exactly the items that would have sorted to the top of a
+p0 ranking.
+
+So the pipeline now refuses to let an unverified item reach the measured surface:
+
+| File | Contents | `eligible_for_prior` |
+| --- | --- | --- |
+| `out/candidates.jsonl` | 1220 items gate G judged and passed | `true` |
+| `out/candidates.pending.jsonl` | 988 items gate G never returned on | `false` |
+
+A consumer that reads the main file is correct by default. A consumer that reads the field is
+correct whichever file it opened. Reading the main file and silently measuring something
+unverified is no longer reachable.
+
+### 5. Is the unjudged set a biased sample
+
+It matters whether the 988 are a random slice or a systematic one, because the 24.5 percent drop
+rate measured on the 1616 is the only evidence available about them.
+
+**No outcome comparison is possible: zero verdicts came back for the 988.** What can be compared is
+composition, and the two sets are close to indistinguishable.
+
+| Cut | Largest deviation |
+| --- | --- |
+| World | es +2.5 points, ja -2.7 points, en +0.2 points |
+| Family | ser-estar +1.4 points, preterite-irregular -1.8 points, every other family inside ±1.4 |
+| Task length | 65 characters judged against 68 unjudged |
+
+No family or world moves by more than 2.7 points. The small deviations that do exist sit in the
+families that saturated earliest (`naadj-crossover` -1.3, `godan-lookalike` -1.1,
+`irregular-participle` -1.1), whose items cluster near the front of the file and were therefore
+judged before the credit ran out. That is a mild ordering effect rather than a content bias.
+
+**Read that as: the deferred set looks like the judged set, so 24.5 percent is a reasonable
+expectation for its drop rate, and there is no sign the failure correlated with anything about the
+items.** It is an inference from composition rather than a measurement, and it stops being needed
+the moment the rerun completes.
+
+### 6. A retry bug this exposed
+
+The first diagnosis of the stall was wrong and the correction is worth recording. The run appeared
+to be rate limited: verdicts slowed from 200 per 16 seconds to 200 per 120 seconds, then stopped.
+It was never throttling. The account had run out of credit, and the API was returning
+`400 invalid_request_error` with `x-should-retry: false`.
+
+The adjudication loop caught every exception alike and slept before retrying, so a permanent
+refusal was indistinguishable from load, and 988 items spent fifty minutes backing off against an
+error that would never clear. `_is_retryable` now separates them: 429 and 5xx are worth waiting
+out, any other 4xx fails immediately, and the first fatal error stops the remaining work and prints
+the API's own message. The same failure now surfaces in about one second.
 
 ### Per family
 
@@ -286,10 +357,18 @@ extra fields are dropped on ingestion. `external_id` is
 match the database's `items_external_id_shape` regex, all 2208 are unique, and none collides with
 the 40.
 
-## Reruns
+## Reruns, and the one action outstanding
 
 `out/adjudication.jsonl` is a verdict cache keyed by `external_id`, and stage 3 only calls for items
-missing from it. Rerunning `stage3_filter.py` finishes the 988 that the rate limit left unjudged
-without repaying for the 1616 already done. Gate G also takes a wall-clock budget, so the stage
-terminates under rate limiting rather than stalling: under load a single verdict cost minutes of
-backoff, and 988 items at that rate would have run for hours.
+missing from it. Gate G also takes a wall-clock budget, so the stage always terminates.
+
+**The outstanding action is to add credit to the Anthropic account and run:**
+
+```bash
+cd scripts/content/generate
+../.venv/bin/python stage3_filter.py --concurrency 8
+```
+
+That fetches only the 988 missing verdicts, moves whatever passes from
+`candidates.pending.jsonl` into `candidates.jsonl`, and updates the funnel. Nothing else in the
+pipeline needs rerunning, and the 1616 verdicts already paid for are reused.
